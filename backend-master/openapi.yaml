@@ -1,0 +1,2842 @@
+openapi: 3.0.3
+info:
+  title: Stratiq Backend API
+  version: "0.0.1"
+  description: >
+    REST API for Stratiq inventory & order management.
+
+    Covers user/role/permission administration, inventory (items, categories,
+    suppliers, batches, bills of material), warehouse & stock management
+    (movements, goods receipt/issue, transfers, reservations), sales/purchase
+    orders with invoicing, production step tracking, and audit logging.
+
+    Authentication is JSON Web Token (JWT) based: call `POST /api/auth/login`
+    to obtain an `accessToken`, then send it as `Authorization: Bearer <token>`
+    on all subsequent requests. Endpoints are additionally protected by
+    fine-grained authorities (e.g. `inventory:read`, `warehouse:write`,
+    `admin:access`) assigned to a user's role — see the Permissions section.
+  contact:
+    name: Stratiq Team
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Login, token refresh and password change
+  - name: Users
+    description: User account administration
+  - name: Roles
+    description: Role administration (bundles of permissions)
+  - name: Permissions
+    description: System permission definitions (read-only, immutable)
+  - name: Warehouses
+    description: Physical/logical storage locations
+  - name: Stock
+    description: Stock levels, goods receipt/issue, transfers, adjustments and difference reports
+  - name: Stock Movements
+    description: Low-level, individually addressable stock movement records
+  - name: Stock Reservations
+    description: Reserve and release stock ahead of fulfillment
+  - name: Order Fulfillment
+    description: Book stock movements for an order's items
+  - name: Items
+    description: Purchased parts and own-manufactured products
+  - name: Categories
+    description: Item categorization
+  - name: Suppliers
+    description: Vendors that supply purchased items
+  - name: Batches
+    description: Lot/batch tracking for items (FEFO/FIFO)
+  - name: Bill of Materials
+    description: Components required to manufacture an own-product item
+  - name: Customers
+    description: Customer master data
+  - name: Orders
+    description: Sales (OUT) and purchase (IN) orders
+  - name: Order Items
+    description: Line items belonging to an order
+  - name: Invoices
+    description: Invoices generated for orders
+  - name: Production Steps (Templates)
+    description: Reusable production step templates defined per item
+  - name: Order Production Steps
+    description: Concrete production steps instantiated for an order's line items
+  - name: Production Dashboard
+    description: Aggregated view of in-progress production orders
+  - name: Audit Logs
+    description: Read-only log of create/update/delete actions across the system
+
+paths:
+  # ============================= AUTH =============================
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with username and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Validation failed (blank username/password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Bad credentials
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password changed
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefreshResponse'
+        '401':
+          description: Refresh token invalid, expired, or not a refresh token
+
+  # ============================= USERS =============================
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: >
+        If `active=true` is passed, returns a flat list of active users.
+        Otherwise returns a paginated result.
+      security: [{ bearerAuth: [user:read] }]
+      parameters:
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/UserResponse' }
+                  - $ref: '#/components/schemas/PageOfUserResponse'
+    post:
+      tags: [Users]
+      summary: Create a user
+      security: [{ bearerAuth: [user:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get a user by ID
+      security: [{ bearerAuth: [user:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Users]
+      summary: Update a user
+      security: [{ bearerAuth: [user:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      security: [{ bearerAuth: [user:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/users/{id}/role:
+    put:
+      tags: [Users]
+      summary: Assign a role to a user
+      security: [{ bearerAuth: [user:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserChangeRoleRequest' }
+      responses:
+        '200':
+          description: Role assigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+
+  # ============================= ROLES =============================
+  /api/v1/roles:
+    get:
+      tags: [Roles]
+      summary: List all roles
+      security: [{ bearerAuth: [user:read] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RoleResponse' }
+    post:
+      tags: [Roles]
+      summary: Create a role
+      security: [{ bearerAuth: [admin:access] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+
+  /api/v1/roles/{id}:
+    get:
+      tags: [Roles]
+      summary: Get a role by ID
+      security: [{ bearerAuth: [user:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Roles]
+      summary: Update a role
+      security: [{ bearerAuth: [admin:access] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+    delete:
+      tags: [Roles]
+      summary: Delete a role
+      security: [{ bearerAuth: [admin:access] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/roles/{id}/permissions:
+    post:
+      tags: [Roles]
+      summary: Assign permissions to a role
+      security: [{ bearerAuth: [admin:access] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PermissionAssignRequest' }
+      responses:
+        '200':
+          description: Permissions assigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+    delete:
+      tags: [Roles]
+      summary: Revoke permissions from a role
+      security: [{ bearerAuth: [admin:access] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PermissionAssignRequest' }
+      responses:
+        '200':
+          description: Permissions revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+
+  # ============================= PERMISSIONS =============================
+  /api/v1/permissions:
+    get:
+      tags: [Permissions]
+      summary: List all permissions
+      security: [{ bearerAuth: [user:read] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PermissionResponse' }
+    post:
+      tags: [Permissions]
+      summary: Create a permission
+      security: [{ bearerAuth: [admin:access] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PermissionCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PermissionResponse' }
+
+  # ============================= WAREHOUSES =============================
+  /api/v1/warehouses:
+    get:
+      tags: [Warehouses]
+      summary: List warehouses
+      description: Filter by `city` or `active=true`; otherwise returns a paginated list.
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: city
+          in: query
+          schema: { type: string }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/WarehouseResponse' }
+                  - $ref: '#/components/schemas/PageOfWarehouseResponse'
+    post:
+      tags: [Warehouses]
+      summary: Create a warehouse
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WarehouseCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WarehouseResponse' }
+
+  /api/v1/warehouses/{id}:
+    get:
+      tags: [Warehouses]
+      summary: Get a warehouse by ID
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WarehouseResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Warehouses]
+      summary: Update a warehouse
+      security: [{ bearerAuth: [warehouse:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WarehouseUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WarehouseResponse' }
+    delete:
+      tags: [Warehouses]
+      summary: Delete a warehouse
+      security: [{ bearerAuth: [warehouse:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= STOCK =============================
+  /api/v1/stock:
+    get:
+      tags: [Stock]
+      summary: Stock difference report (alias of /difference-report)
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DifferenceReportResponse' }
+
+  /api/v1/stock/difference-report:
+    get:
+      tags: [Stock]
+      summary: Stock difference report (total IN vs total OUT / balance)
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DifferenceReportResponse' }
+
+  /api/v1/stock/movements:
+    get:
+      tags: [Stock]
+      summary: Paginated list of all stock movements
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PageOfStockMovementResponse' }
+
+  /api/v1/stock/levels:
+    get:
+      tags: [Stock]
+      summary: Stock overview — current balance for every item, summed across warehouses
+      security: [{ bearerAuth: [warehouse:read] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockLevelResponse' }
+
+  /api/v1/stock/levels/{itemId}/warehouses:
+    get:
+      tags: [Stock]
+      summary: Per-warehouse breakdown of one item's stock
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WarehouseStockResponse' }
+
+  /api/v1/stock/warehouses/{warehouseId}/levels:
+    get:
+      tags: [Stock]
+      summary: Per-item stock levels within a single warehouse
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: warehouseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockLevelResponse' }
+
+  /api/v1/stock/batches:
+    get:
+      tags: [Stock]
+      summary: Available batches (balance > 0) for an item in a warehouse, ordered FEFO/FIFO
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BatchStockResponse' }
+
+  /api/v1/stock/adjustment:
+    post:
+      tags: [Stock]
+      summary: Book a stock adjustment (correct on-hand quantity up or down)
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustmentRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementResponse' }
+
+  /api/v1/stock/goods-receipt:
+    post:
+      tags: [Stock]
+      summary: "Wareneingang: book an IN movement into a warehouse"
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoodsReceiptRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementResponse' }
+        '409':
+          description: Conflict / business rule violation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/stock/goods-issue:
+    post:
+      tags: [Stock]
+      summary: "Warenausgang: book OUT movement(s); auto-allocates across batches (FEFO/FIFO)"
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoodsIssueRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockMovementResponse' }
+        '409':
+          description: Insufficient stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/stock/transfer:
+    post:
+      tags: [Stock]
+      summary: "Umlagerung: move stock between two warehouses"
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockTransferRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockMovementResponse' }
+        '409':
+          description: Insufficient stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ============================= STOCK MOVEMENTS =============================
+  /api/v1/stock-movements:
+    get:
+      tags: [Stock Movements]
+      summary: List stock movements
+      description: >
+        Filter by `itemId`, `warehouseId`, `orderId`, or `type` (checked in that
+        order, first match wins and returns an unpaginated list). With no filter,
+        returns a paginated list of all movements.
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: orderId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/StockMovementResponse' }
+                  - $ref: '#/components/schemas/PageOfStockMovementResponse'
+    post:
+      tags: [Stock Movements]
+      summary: Create a stock movement directly
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockMovementCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementResponse' }
+
+  /api/v1/stock-movements/{id}:
+    get:
+      tags: [Stock Movements]
+      summary: Get a stock movement by ID
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Stock Movements]
+      summary: Update a stock movement
+      security: [{ bearerAuth: [warehouse:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockMovementUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockMovementResponse' }
+    delete:
+      tags: [Stock Movements]
+      summary: Delete a stock movement
+      security: [{ bearerAuth: [warehouse:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= STOCK RESERVATIONS =============================
+  /api/v1/stock/reservations:
+    get:
+      tags: [Stock Reservations]
+      summary: List reservations
+      description: Optionally filtered by warehouse, item and status (default ACTIVE).
+      security: [{ bearerAuth: [warehouse:read] }]
+      parameters:
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ReservationStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ReservationResponse' }
+    post:
+      tags: [Stock Reservations]
+      summary: Reserve stock
+      description: Fails if available stock is insufficient.
+      security: [{ bearerAuth: [warehouse:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReservationRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+        '409':
+          description: Insufficient available stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/stock/reservations/{id}/release:
+    post:
+      tags: [Stock Reservations]
+      summary: Release an active reservation, freeing the blocked stock
+      security: [{ bearerAuth: [warehouse:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: Released
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationResponse' }
+
+  # ============================= ORDER FULFILLMENT =============================
+  /api/v1/orders/{orderId}/fulfill:
+    post:
+      tags: [Order Fulfillment]
+      summary: Book stock movements for all order items (direction IN or OUT), linked to the order
+      security: [{ bearerAuth: [warehouse:write] }]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderFulfillRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockMovementResponse' }
+
+  # ============================= ITEMS =============================
+  /api/v1/items:
+    get:
+      tags: [Items]
+      summary: List items
+      description: >
+        Filter by `categoryId` or `kind` (checked in that order, first match wins);
+        with no filter returns all items.
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters:
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/ItemKind' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ItemResponse' }
+    post:
+      tags: [Items]
+      summary: Create an item
+      security: [{ bearerAuth: [inventory:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+
+  /api/v1/items/{id}:
+    get:
+      tags: [Items]
+      summary: Get an item by ID
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Items]
+      summary: Update an item (full or partial — non-null fields applied)
+      security: [{ bearerAuth: [inventory:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+    patch:
+      tags: [Items]
+      summary: Partially update an item (only non-null fields applied)
+      security: [{ bearerAuth: [inventory:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemResponse' }
+    delete:
+      tags: [Items]
+      summary: Delete (soft-delete) an item
+      security: [{ bearerAuth: [inventory:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= CATEGORIES =============================
+  /api/v1/categories:
+    get:
+      tags: [Categories]
+      summary: List categories (paginated)
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PageOfCategoryResponse' }
+    post:
+      tags: [Categories]
+      summary: Create a category
+      security: [{ bearerAuth: [inventory:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryResponse' }
+
+  /api/v1/categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get a category by ID
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      security: [{ bearerAuth: [inventory:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= SUPPLIERS =============================
+  /api/v1/suppliers:
+    get:
+      tags: [Suppliers]
+      summary: List suppliers — filter by name (optional)
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters:
+        - name: name
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/SupplierResponse' }
+                  - $ref: '#/components/schemas/PageOfSupplierResponse'
+    post:
+      tags: [Suppliers]
+      summary: Create a supplier
+      security: [{ bearerAuth: [inventory:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupplierCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierResponse' }
+
+  /api/v1/suppliers/{id}:
+    get:
+      tags: [Suppliers]
+      summary: Get a supplier by ID
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Suppliers]
+      summary: Update a supplier
+      security: [{ bearerAuth: [inventory:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SupplierUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierResponse' }
+    delete:
+      tags: [Suppliers]
+      summary: Delete (soft-delete) a supplier
+      security: [{ bearerAuth: [inventory:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= BATCHES =============================
+  /api/v1/batches:
+    get:
+      tags: [Batches]
+      summary: List batches
+      description: Filter by `itemId` or `warehouseId` (first match wins); otherwise returns all batches.
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: warehouseId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BatchResponse' }
+    post:
+      tags: [Batches]
+      summary: Create a batch (metadata only — stock enters via a goods receipt)
+      security: [{ bearerAuth: [inventory:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResponse' }
+
+  /api/v1/batches/{id}:
+    get:
+      tags: [Batches]
+      summary: Get a batch by ID
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Batches]
+      summary: Update a batch's metadata
+      security: [{ bearerAuth: [inventory:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResponse' }
+    delete:
+      tags: [Batches]
+      summary: Delete a batch
+      security: [{ bearerAuth: [inventory:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= BOM =============================
+  /api/v1/bom:
+    get:
+      tags: [Bill of Materials]
+      summary: List BOM components for an item
+      description: Requires `itemId`; without it, returns an empty list.
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BomResponse' }
+    post:
+      tags: [Bill of Materials]
+      summary: Add a component to an item's bill of materials
+      security: [{ bearerAuth: [inventory:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BomCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BomResponse' }
+
+  /api/v1/bom/{id}:
+    get:
+      tags: [Bill of Materials]
+      summary: Get a BOM entry by ID
+      security: [{ bearerAuth: [inventory:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BomResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Bill of Materials]
+      summary: Remove a component from a bill of materials
+      security: [{ bearerAuth: [inventory:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= CUSTOMERS =============================
+  /api/v1/customers:
+    get:
+      tags: [Customers]
+      summary: List customers — filter by name (optional)
+      security: [{ bearerAuth: [customer:read] }]
+      parameters:
+        - name: name
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/CustomerResponse' }
+                  - $ref: '#/components/schemas/PageOfCustomerResponse'
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      security: [{ bearerAuth: [customer:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+
+  /api/v1/customers/{id}:
+    get:
+      tags: [Customers]
+      summary: Get a customer by ID
+      security: [{ bearerAuth: [customer:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Customers]
+      summary: Update a customer
+      security: [{ bearerAuth: [customer:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+    delete:
+      tags: [Customers]
+      summary: Delete a customer
+      security: [{ bearerAuth: [customer:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= ORDERS =============================
+  /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      description: Filter by `customerId`, `status`, or `direction` (first match wins); otherwise returns a paginated list.
+      security: [{ bearerAuth: [order:read] }]
+      parameters:
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OrderStatus' }
+        - name: direction
+          in: query
+          schema: { $ref: '#/components/schemas/OrderDirection' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/OrderResponse' }
+                  - $ref: '#/components/schemas/PageOfOrderResponse'
+    post:
+      tags: [Orders]
+      summary: Create an order
+      security: [{ bearerAuth: [order:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get an order by ID
+      security: [{ bearerAuth: [order:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Orders]
+      summary: Update an order
+      security: [{ bearerAuth: [order:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+    delete:
+      tags: [Orders]
+      summary: Delete an order
+      security: [{ bearerAuth: [order:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/orders/{id}/confirm:
+    post:
+      tags: [Orders]
+      summary: Confirm the order and reserve BOM components for any OWN_PRODUCT line
+      security: [{ bearerAuth: [order:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+
+  /api/v1/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel the order and release any reservations made for it
+      security: [{ bearerAuth: [order:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+
+  /api/v1/orders/{id}/items:
+    get:
+      tags: [Orders]
+      summary: List an order's line items
+      security: [{ bearerAuth: [order:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OrderItemResponse' }
+
+  /api/v1/orders/{orderId}/items/{itemId}/production:
+    get:
+      tags: [Orders]
+      summary: List production steps for one order item
+      security: [{ bearerAuth: [production:read] }]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+
+  # ============================= ORDER ITEMS =============================
+  /api/v1/order-items:
+    get:
+      tags: [Order Items]
+      summary: List order items — filter by orderId (optional)
+      security: [{ bearerAuth: [order:read] }]
+      parameters:
+        - name: orderId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/OrderItemResponse' }
+                  - $ref: '#/components/schemas/PageOfOrderItemResponse'
+    post:
+      tags: [Order Items]
+      summary: Create an order item
+      security: [{ bearerAuth: [order:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderItemCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderItemResponse' }
+
+  /api/v1/order-items/{id}:
+    get:
+      tags: [Order Items]
+      summary: Get an order item by ID
+      security: [{ bearerAuth: [order:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderItemResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Order Items]
+      summary: Update an order item
+      security: [{ bearerAuth: [order:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderItemUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderItemResponse' }
+    delete:
+      tags: [Order Items]
+      summary: Delete an order item
+      security: [{ bearerAuth: [order:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= INVOICES =============================
+  /api/v1/invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices — filter by orderId or status (optional)
+      security: [{ bearerAuth: [order:read] }]
+      parameters:
+        - name: orderId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/InvoiceStatus' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/InvoiceResponse' }
+                  - $ref: '#/components/schemas/PageOfInvoiceResponse'
+    post:
+      tags: [Invoices]
+      summary: Create an invoice for an order
+      description: >
+        `invoiceNumber` and the subtotal/tax/total amounts are not client input:
+        the invoice number is generated server-side (sequential per year) and the
+        amounts are calculated from the order's line items.
+      security: [{ bearerAuth: [order:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResponse' }
+
+  /api/v1/invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Get an invoice by ID
+      security: [{ bearerAuth: [order:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Invoices]
+      summary: Update an invoice
+      security: [{ bearerAuth: [order:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResponse' }
+    delete:
+      tags: [Invoices]
+      summary: Delete an invoice
+      security: [{ bearerAuth: [order:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= PRODUCTION STEPS (TEMPLATES) =============================
+  /api/v1/production-steps:
+    get:
+      tags: [Production Steps (Templates)]
+      summary: List production step templates — filter by itemId (optional)
+      security: [{ bearerAuth: [production:read] }]
+      parameters:
+        - name: itemId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/ProductionStepResponse' }
+                  - $ref: '#/components/schemas/PageOfProductionStepResponse'
+    post:
+      tags: [Production Steps (Templates)]
+      summary: Create a production step template
+      security: [{ bearerAuth: [production:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductionStepCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionStepResponse' }
+
+  /api/v1/production-steps/{id}:
+    get:
+      tags: [Production Steps (Templates)]
+      summary: Get a production step template by ID
+      security: [{ bearerAuth: [production:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionStepResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Production Steps (Templates)]
+      summary: Update a production step template
+      security: [{ bearerAuth: [production:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductionStepUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionStepResponse' }
+    delete:
+      tags: [Production Steps (Templates)]
+      summary: Delete a production step template
+      security: [{ bearerAuth: [production:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= ORDER PRODUCTION STEPS =============================
+  /api/v1/order-production-steps:
+    get:
+      tags: [Order Production Steps]
+      summary: List order production steps — filter by orderId (optional)
+      security: [{ bearerAuth: [production:read] }]
+      parameters:
+        - name: orderId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+                  - $ref: '#/components/schemas/PageOfOrderProductionStepResponse'
+    post:
+      tags: [Order Production Steps]
+      summary: Create an order production step
+      security: [{ bearerAuth: [production:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderProductionStepCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+
+  /api/v1/order-production-steps/{id}:
+    get:
+      tags: [Order Production Steps]
+      summary: Get an order production step by ID
+      security: [{ bearerAuth: [production:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Order Production Steps]
+      summary: Update an order production step
+      security: [{ bearerAuth: [production:write] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderProductionStepUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+    delete:
+      tags: [Order Production Steps]
+      summary: Delete an order production step
+      security: [{ bearerAuth: [production:delete] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204': { description: Deleted }
+
+  # ============================= PRODUCTION DASHBOARD =============================
+  /api/v1/production/orders:
+    get:
+      tags: [Production Dashboard]
+      summary: List active production orders with progress summary
+      security: [{ bearerAuth: [production:read] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductionOrderSummaryResponse' }
+
+  /api/v1/production/orders/{id}:
+    get:
+      tags: [Production Dashboard]
+      summary: Get production detail for one order, including assets and their steps
+      security: [{ bearerAuth: [production:read] }]
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionOrderDetailResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/production/steps/{stepId}:
+    patch:
+      tags: [Production Dashboard]
+      summary: Patch a production step's status/assignment from the dashboard
+      description: >
+        `warehouseId` is required when this patch completes the last step of an
+        order line: it is the target warehouse for the finished good's stock-IN.
+      security: [{ bearerAuth: [production:write] }]
+      parameters:
+        - name: stepId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductionStepPatchRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+
+  # ============================= AUDIT LOGS =============================
+  /api/v1/audit-logs:
+    get:
+      tags: [Audit Logs]
+      summary: List audit log entries
+      description: Filter by `userId`, or by `entityType` + `entityId` together; otherwise returns all entries.
+      security: [{ bearerAuth: [audit:read] }]
+      parameters:
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PageOfAuditLogResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Obtain a token via `POST /api/auth/login`. Send it as
+        `Authorization: Bearer <accessToken>`. Endpoints additionally require
+        the listed authority (permission codename) on the caller's role.
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PageParam:
+      name: page
+      in: query
+      description: Zero-based page index
+      schema: { type: integer, minimum: 0, default: 0 }
+    SizeParam:
+      name: size
+      in: query
+      description: Page size
+      schema: { type: integer, minimum: 1, default: 20 }
+    SortParam:
+      name: sort
+      in: query
+      description: "Sort field and direction, e.g. `createdAt,desc`"
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    # ---------- Shared ----------
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        error: { type: string }
+        message: { type: string }
+        path: { type: string }
+
+    Unit:
+      type: string
+      description: Measurement unit for items, order lines and BOM quantities
+      enum: [piece, kg, g, l, ml, m, cm, m2, m3, hour, day, set]
+
+    # ---------- Auth ----------
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+        rfidUid: { type: string, nullable: true }
+
+    LoginResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, format: int64, description: Milliseconds until access token expiry }
+        username: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+          description: Authority codenames granted to the user's role
+
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refreshToken: { type: string }
+
+    TokenRefreshResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, format: int64 }
+
+    ChangePasswordRequest:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, minLength: 6, maxLength: 100 }
+
+    # ---------- Users / Roles / Permissions ----------
+    PermissionCode:
+      type: string
+      description: Authority codenames used across the API (see security requirements per endpoint)
+      enum:
+        - inventory:read
+        - inventory:write
+        - inventory:delete
+        - order:read
+        - order:write
+        - order:delete
+        - customer:read
+        - customer:write
+        - customer:delete
+        - warehouse:read
+        - warehouse:write
+        - warehouse:delete
+        - production:read
+        - production:write
+        - production:delete
+        - user:read
+        - user:write
+        - user:delete
+        - audit:read
+        - admin:access
+
+    UserCreateRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        roleId: { type: string, format: uuid }
+        preferredLang: { type: string, example: de }
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        roleId: { type: string, format: uuid }
+        preferredLang: { type: string }
+        isActive: { type: boolean }
+
+    UserChangeRoleRequest:
+      type: object
+      properties:
+        roleId: { type: string, format: uuid }
+
+    UserResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        email: { type: string, format: email }
+        roleId: { type: string, format: uuid }
+        roleName: { type: string }
+        preferredLang: { type: string }
+        isActive: { type: boolean }
+
+    RoleCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+
+    RoleUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+
+    RoleResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        description: { type: string }
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/PermissionResponse' }
+
+    PermissionAssignRequest:
+      type: object
+      properties:
+        permissionIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    PermissionCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        codename: { type: string }
+
+    PermissionResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        codename: { type: string }
+
+    # ---------- Warehouses ----------
+    WarehouseCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        isActive: { type: boolean }
+
+    WarehouseUpdateRequest:
+      type: object
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        isActive: { type: boolean }
+
+    WarehouseResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        description: { type: string }
+        street: { type: string }
+        houseNumber: { type: string }
+        zipCode: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string }
+        isActive: { type: boolean }
+
+    # ---------- Stock / Movements ----------
+    MovementType:
+      type: string
+      enum: [IN, OUT, TRANSFER]
+
+    ReservationStatus:
+      type: string
+      description: >
+        ACTIVE blocks available stock. RELEASED was cancelled without being
+        consumed. FULFILLED was consumed by production completion.
+      enum: [ACTIVE, RELEASED, FULFILLED]
+
+    AdjustmentRequest:
+      type: object
+      required: [itemId, warehouseId, quantity]
+      properties:
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        quantity: { type: integer, format: int64, description: May be negative or positive }
+        note: { type: string, maxLength: 255 }
+
+    GoodsReceiptRequest:
+      type: object
+      required: [itemId, warehouseId, quantity]
+      description: >
+        If batchNumber is set, the movement is booked onto that lot (created if
+        new); leave it null for untracked stock. expiryDate only applies when a
+        new batch is created.
+      properties:
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        quantity: { type: integer, format: int64, minimum: 1 }
+        batchNumber: { type: string, maxLength: 100 }
+        expiryDate: { type: string, format: date-time }
+        note: { type: string, maxLength: 255 }
+        orderId: { type: string, format: uuid }
+
+    GoodsIssueRequest:
+      type: object
+      required: [itemId, warehouseId, quantity]
+      description: >
+        If batchId is set, stock is taken from that specific lot. Otherwise it
+        is allocated automatically across batches FEFO-then-FIFO, possibly
+        spanning several lots.
+      properties:
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        quantity: { type: integer, format: int64, minimum: 1 }
+        batchId: { type: string, format: uuid }
+        note: { type: string, maxLength: 255 }
+        orderId: { type: string, format: uuid }
+
+    StockTransferRequest:
+      type: object
+      required: [itemId, fromWarehouseId, toWarehouseId, quantity]
+      description: Booked as an OUT in the source and an IN in the target warehouse.
+      properties:
+        itemId: { type: string, format: uuid }
+        fromWarehouseId: { type: string, format: uuid }
+        toWarehouseId: { type: string, format: uuid }
+        quantity: { type: integer, format: int64, minimum: 1 }
+        note: { type: string, maxLength: 255 }
+
+    StockMovementCreateRequest:
+      type: object
+      required: [quantity, type, itemId, warehouseId]
+      properties:
+        note: { type: string, maxLength: 255 }
+        quantity: { type: integer, format: int64 }
+        type: { type: string, maxLength: 255, description: "e.g. IN, OUT, TRANSFER" }
+        itemId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+
+    StockMovementUpdateRequest:
+      type: object
+      properties:
+        note: { type: string, maxLength: 255 }
+        quantity: { type: integer, format: int64 }
+        type: { type: string, maxLength: 255 }
+        itemId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+
+    StockMovementResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        note: { type: string }
+        quantity: { type: integer, format: int64 }
+        type: { type: string }
+        itemId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid, nullable: true }
+        warehouseId: { type: string, format: uuid }
+        batchId: { type: string, format: uuid, nullable: true }
+        batchNumber: { type: string, nullable: true, description: "Human-readable batch info, null for untracked movements" }
+        expiryDate: { type: string, format: date-time, nullable: true }
+
+    StockLevelResponse:
+      type: object
+      description: Current stock level for a single item, summed across all warehouses. balance = totalIn - totalOut.
+      properties:
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        totalIn: { type: integer, format: int64 }
+        totalOut: { type: integer, format: int64 }
+        balance: { type: integer, format: int64 }
+
+    WarehouseStockResponse:
+      type: object
+      description: Stock level of one item broken down for a single warehouse.
+      properties:
+        warehouseId: { type: string, format: uuid }
+        warehouseName: { type: string }
+        totalIn: { type: integer, format: int64 }
+        totalOut: { type: integer, format: int64 }
+        balance: { type: integer, format: int64 }
+
+    DifferenceReportResponse:
+      type: object
+      properties:
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        warehouseId: { type: string, format: uuid }
+        warehouseName: { type: string }
+        totalIn: { type: integer, format: int64 }
+        totalOut: { type: integer, format: int64 }
+        balance: { type: integer, format: int64 }
+
+    BatchStockResponse:
+      type: object
+      description: Derived available stock of a single batch for an item in a warehouse.
+      properties:
+        batchId: { type: string, format: uuid }
+        batchNumber: { type: string }
+        expiryDate: { type: string, format: date-time, nullable: true }
+        balance: { type: integer, format: int64 }
+
+    CreateReservationRequest:
+      type: object
+      required: [itemId, warehouseId, quantity]
+      description: Reserve a quantity of an item in a warehouse. Fails if available stock is insufficient.
+      properties:
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        quantity: { type: integer, format: int64, minimum: 1 }
+        note: { type: string, maxLength: 255 }
+        orderId: { type: string, format: uuid }
+
+    ReservationResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        warehouseId: { type: string, format: uuid }
+        warehouseName: { type: string }
+        quantity: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/ReservationStatus' }
+        note: { type: string }
+        orderId: { type: string, format: uuid, nullable: true }
+        releasedAt: { type: string, format: date-time, nullable: true }
+
+    OrderFulfillRequest:
+      type: object
+      required: [direction]
+      description: >
+        direction "IN" is a goods receipt (requires warehouseId). direction
+        "OUT" is a goods issue, auto-allocated across warehouses (warehouseId
+        optional/ignored). batchLines is optional per-item batch metadata,
+        only applied for direction IN.
+      properties:
+        warehouseId: { type: string, format: uuid }
+        direction: { type: string, enum: [IN, OUT] }
+        batchLines:
+          type: array
+          items:
+            type: object
+            description: "Batch info for one order item's goods receipt. batchNumber blank/null = untracked."
+            properties:
+              itemId: { type: string, format: uuid }
+              batchNumber: { type: string }
+              expiryDate: { type: string, format: date-time }
+
+    # ---------- Inventory ----------
+    ItemKind:
+      type: string
+      enum: [OWN_PRODUCT, PURCHASED]
+
+    ItemCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ItemKind' }
+        categoryId: { type: string, format: uuid }
+        unit: { type: string }
+        price: { type: number, format: decimal }
+        description: { type: string }
+        notes: { type: string }
+
+    ItemUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ItemKind' }
+        categoryId: { type: string, format: uuid }
+        unit: { type: string }
+        price: { type: number, format: decimal }
+        description: { type: string }
+        notes: { type: string }
+
+    ItemResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        kind: { $ref: '#/components/schemas/ItemKind' }
+        categoryId: { type: string, format: uuid, nullable: true }
+        categoryName: { type: string, nullable: true }
+        unit: { type: string }
+        price: { type: number, format: decimal }
+        description: { type: string }
+        notes: { type: string }
+        isDeleted: { type: boolean }
+
+    CategoryCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 50 }
+        description: { type: string, maxLength: 255 }
+
+    CategoryResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        description: { type: string }
+
+    SupplierCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 50 }
+        taxId: { type: string, maxLength: 50 }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        notes: { type: string }
+
+    SupplierUpdateRequest:
+      type: object
+      properties:
+        name: { type: string, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 50 }
+        taxId: { type: string, maxLength: 50 }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        notes: { type: string }
+
+    SupplierResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        taxId: { type: string }
+        street: { type: string }
+        houseNumber: { type: string }
+        zipCode: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string }
+        notes: { type: string }
+
+    BatchCreateRequest:
+      type: object
+      description: A batch is metadata only. Stock enters via a goods receipt (IN movement), not here.
+      properties:
+        batchNumber: { type: string }
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        expiryDate: { type: string, format: date-time }
+
+    BatchUpdateRequest:
+      type: object
+      description: A batch is metadata only. Stock is adjusted via stock movements, not here.
+      properties:
+        batchNumber: { type: string }
+        itemId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        expiryDate: { type: string, format: date-time }
+
+    BatchResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        batchNumber: { type: string }
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        warehouseId: { type: string, format: uuid }
+        warehouseName: { type: string }
+        expiryDate: { type: string, format: date-time, nullable: true }
+        currentStock: { type: number, format: decimal, description: "Derived from movements: SUM(IN) - SUM(OUT)" }
+
+    BomCreateRequest:
+      type: object
+      description: Component must be of kind PURCHASED — no nested/sub-assembly BOMs.
+      properties:
+        itemId: { type: string, format: uuid, description: Parent item (manufactured OWN_PRODUCT) }
+        componentId: { type: string, format: uuid, description: Component item (the part needed) }
+        quantity: { type: number, format: decimal, description: Quantity of component needed per parent item }
+        unit: { type: string }
+        notes: { type: string }
+
+    BomResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        componentId: { type: string, format: uuid }
+        componentName: { type: string }
+        quantity: { type: number, format: decimal }
+        unit: { type: string }
+        notes: { type: string }
+
+    # ---------- Orders ----------
+    OrderStatus:
+      type: string
+      description: "Lifecycle: DRAFT → CONFIRMED → COMPLETED (or CANCELLED at any stage)."
+      enum: [DRAFT, CONFIRMED, CANCELLED, COMPLETED]
+
+    OrderDirection:
+      type: string
+      description: Whether fulfilling this order books stock IN (goods receipt/procurement) or OUT (goods issue/sale).
+      enum: [IN, OUT]
+
+    InvoiceStatus:
+      type: string
+      description: "Lifecycle: ISSUED → PAID (or CANCELLED)."
+      enum: [ISSUED, PAID, CANCELLED]
+
+    CustomerCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 50 }
+        taxId: { type: string, maxLength: 50 }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        notes: { type: string }
+
+    CustomerUpdateRequest:
+      type: object
+      properties:
+        name: { type: string, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 50 }
+        taxId: { type: string, maxLength: 50 }
+        street: { type: string, maxLength: 255 }
+        houseNumber: { type: string, maxLength: 20 }
+        zipCode: { type: string, maxLength: 20 }
+        city: { type: string, maxLength: 100 }
+        state: { type: string, maxLength: 100 }
+        country: { type: string, maxLength: 100 }
+        notes: { type: string }
+
+    CustomerResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        taxId: { type: string }
+        street: { type: string }
+        houseNumber: { type: string }
+        zipCode: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string }
+        notes: { type: string }
+
+    OrderCreateRequest:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        orderNumber: { type: string, maxLength: 50 }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        direction: { $ref: '#/components/schemas/OrderDirection' }
+        orderDate: { type: string, format: date-time }
+        expectedDate: { type: string, format: date-time }
+        totalAmount: { type: number, format: decimal }
+        notes: { type: string }
+
+    OrderUpdateRequest:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        orderNumber: { type: string, maxLength: 50 }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        expectedDate: { type: string, format: date-time }
+        totalAmount: { type: number, format: decimal }
+        notes: { type: string }
+
+    OrderResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        customerId: { type: string, format: uuid, nullable: true }
+        orderNumber: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        direction: { $ref: '#/components/schemas/OrderDirection' }
+        orderDate: { type: string, format: date-time }
+        expectedDate: { type: string, format: date-time, nullable: true }
+        confirmedAt: { type: string, format: date-time, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        totalAmount: { type: number, format: decimal }
+        notes: { type: string }
+
+    OrderItemCreateRequest:
+      type: object
+      required: [orderId, itemId, itemName, unit, quantity, unitPrice]
+      properties:
+        orderId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        itemName: { type: string, maxLength: 255 }
+        unit: { $ref: '#/components/schemas/Unit' }
+        quantity: { type: number, format: decimal, minimum: 0.001 }
+        unitPrice: { type: number, format: decimal, minimum: 0 }
+        notes: { type: string }
+        supplierId: { type: string, format: uuid }
+
+    OrderItemUpdateRequest:
+      type: object
+      properties:
+        itemName: { type: string, maxLength: 255 }
+        unit: { $ref: '#/components/schemas/Unit' }
+        quantity: { type: number, format: decimal, minimum: 0.001 }
+        unitPrice: { type: number, format: decimal, minimum: 0 }
+        notes: { type: string }
+        supplierId: { type: string, format: uuid }
+
+    OrderItemResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        orderId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        itemName: { type: string }
+        unit: { $ref: '#/components/schemas/Unit' }
+        quantity: { type: number, format: decimal }
+        unitPrice: { type: number, format: decimal }
+        lineTotal: { type: number, format: decimal }
+        notes: { type: string }
+        supplierId: { type: string, format: uuid, nullable: true }
+
+    InvoiceCreateRequest:
+      type: object
+      required: [orderId]
+      properties:
+        orderId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/InvoiceStatus' }
+        issueDate: { type: string, format: date-time }
+        dueDate: { type: string, format: date-time }
+        notes: { type: string }
+
+    InvoiceUpdateRequest:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/InvoiceStatus' }
+        dueDate: { type: string, format: date-time }
+        paidAt: { type: string, format: date-time }
+        cancelledAt: { type: string, format: date-time }
+        subtotal: { type: number, format: decimal }
+        taxAmount: { type: number, format: decimal }
+        totalAmount: { type: number, format: decimal }
+        notes: { type: string }
+
+    InvoiceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        invoiceNumber: { type: string }
+        orderId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/InvoiceStatus' }
+        issueDate: { type: string, format: date-time, nullable: true }
+        dueDate: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        subtotal: { type: number, format: decimal }
+        taxAmount: { type: number, format: decimal }
+        totalAmount: { type: number, format: decimal }
+        notes: { type: string }
+
+    # ---------- Production ----------
+    ProductionStepStatus:
+      type: string
+      description: "Workflow: PENDING → IN_PROGRESS → DONE."
+      enum: [PENDING, IN_PROGRESS, DONE]
+
+    ProductionStepCreateRequest:
+      type: object
+      required: [itemId, name, stepOrder]
+      properties:
+        itemId: { type: string, format: uuid }
+        name: { type: string, maxLength: 255 }
+        description: { type: string }
+        stepOrder: { type: integer, minimum: 1 }
+        notes: { type: string }
+
+    ProductionStepUpdateRequest:
+      type: object
+      properties:
+        name: { type: string, maxLength: 255 }
+        description: { type: string }
+        stepOrder: { type: integer, minimum: 1 }
+        notes: { type: string }
+        isDeleted: { type: boolean }
+
+    ProductionStepResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        itemId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        stepOrder: { type: integer }
+        isDeleted: { type: boolean }
+        notes: { type: string }
+
+    OrderProductionStepCreateRequest:
+      type: object
+      required: [orderId, orderItemId, templateStepId, name, stepOrder]
+      properties:
+        orderId: { type: string, format: uuid }
+        orderItemId: { type: string, format: uuid }
+        templateStepId: { type: string, format: uuid }
+        name: { type: string, maxLength: 255 }
+        description: { type: string }
+        stepOrder: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/ProductionStepStatus' }
+        assignedTo: { type: string, format: uuid }
+
+    OrderProductionStepUpdateRequest:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/ProductionStepStatus' }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        assignedTo: { type: string, format: uuid }
+        description: { type: string }
+
+    OrderProductionStepResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        orderId: { type: string, format: uuid }
+        orderItemId: { type: string, format: uuid }
+        templateStepId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        stepOrder: { type: integer }
+        status: { $ref: '#/components/schemas/ProductionStepStatus' }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        assignedTo: { type: string, format: uuid, nullable: true }
+
+    ProductionStepPatchRequest:
+      type: object
+      description: >
+        Partial update from the dashboard. `assignedTo` explicitly set to null
+        removes the assignment (distinct from the key being absent).
+      properties:
+        status: { $ref: '#/components/schemas/ProductionStepStatus' }
+        assignedTo: { type: string, format: uuid, nullable: true }
+        warehouseId:
+          type: string
+          format: uuid
+          description: Required when this patch completes the last step of an order line.
+
+    ProductionOrderSummaryResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderNumber: { type: string }
+        customerName: { type: string }
+        orderDate: { type: string, format: date-time }
+        totalSteps: { type: integer }
+        completedSteps: { type: integer }
+        progressPercent: { type: integer }
+
+    ProductionOrderDetailResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderNumber: { type: string }
+        customerName: { type: string }
+        assets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              itemName: { type: string }
+              quantity: { type: number, format: decimal }
+              totalSteps: { type: integer }
+              completedSteps: { type: integer }
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    name: { type: string }
+                    stepOrder: { type: integer }
+                    status: { $ref: '#/components/schemas/ProductionStepStatus' }
+                    assignedTo:
+                      type: object
+                      nullable: true
+                      properties:
+                        id: { type: string, format: uuid }
+                        email: { type: string }
+                    startedAt: { type: string, format: date-time, nullable: true }
+                    completedAt: { type: string, format: date-time, nullable: true }
+
+    # ---------- Audit ----------
+    AuditLogResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        userId: { type: string, format: uuid, nullable: true }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid }
+        action: { type: string }
+        oldValue: { type: string, nullable: true }
+        newValue: { type: string, nullable: true }
+
+    # ---------- Page<T> wrappers (Spring Data JSON shape) ----------
+    PageOfUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/UserResponse' }
+
+    PageOfWarehouseResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/WarehouseResponse' }
+
+    PageOfStockMovementResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/StockMovementResponse' }
+
+    PageOfCategoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/CategoryResponse' }
+
+    PageOfSupplierResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/SupplierResponse' }
+
+    PageOfCustomerResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/CustomerResponse' }
+
+    PageOfOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/OrderResponse' }
+
+    PageOfOrderItemResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/OrderItemResponse' }
+
+    PageOfInvoiceResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/InvoiceResponse' }
+
+    PageOfProductionStepResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/ProductionStepResponse' }
+
+    PageOfOrderProductionStepResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/OrderProductionStepResponse' }
+
+    PageOfAuditLogResponse:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/AuditLogResponse' }
+
+    PageMetadata:
+      type: object
+      description: Standard Spring Data `Page<T>` JSON envelope
+      properties:
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        size: { type: integer }
+        number: { type: integer, description: Current page index (zero-based) }
+        numberOfElements: { type: integer }
+        first: { type: boolean }
+        last: { type: boolean }
+        empty: { type: boolean }

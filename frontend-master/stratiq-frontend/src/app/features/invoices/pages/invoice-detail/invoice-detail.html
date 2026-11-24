@@ -1,0 +1,197 @@
+<div class="app-layout flex flex-col min-h-screen">
+  <div class="print:hidden">
+    <app-navbar [showBack]="true"></app-navbar>
+  </div>
+
+  <div class="page-content flex-1">
+    @if (loading()) {
+      <div class="flex items-center justify-center py-32 text-text-muted text-sm">
+        {{ 'table.loading' | t }}
+      </div>
+    } @else if (!invoice()) {
+      <div class="flex items-center justify-center py-32 text-text-muted text-sm">
+        {{ 'invoices.detail.notFound' | t }}
+      </div>
+    } @else {
+
+      <!-- Actions (screen only) -->
+      <div class="flex items-start justify-between mb-8 print:hidden">
+        <div>
+          <h1 class="page-title">{{ invoice()!.invoiceNumber }}</h1>
+          <p class="page-subtitle mt-1">
+            <span [class]="statusBadgeClass(invoice()!.status)">{{ i18n.t(statusKey(invoice()!.status)) }}</span>
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 mt-1">
+          <button
+            (click)="print()"
+            class="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:bg-surface-muted transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+            </svg>
+            {{ 'invoices.detail.print' | t }}
+          </button>
+
+          @if (invoice()!.status === 'ISSUED' && canUpdate()) {
+            <button
+              (click)="cancelInvoice()"
+              [disabled]="updating()"
+              class="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-danger/30 bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger/5 transition-colors disabled:opacity-50"
+            >
+              {{ 'invoices.detail.cancel' | t }}
+            </button>
+            <button
+              (click)="markPaid()"
+              [disabled]="updating()"
+              class="fluent-button-primary disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+            >
+              @if (updating()) {
+                <svg class="size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+              }
+              {{ 'invoices.detail.markPaid' | t }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (actionError()) {
+        <div class="mb-6 rounded-[var(--radius-control)] border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger print:hidden">
+          {{ actionError()! | t }}
+        </div>
+      }
+
+      <!-- Invoice document -->
+      <div class="fluent-card p-10 print:shadow-none print:border-0 print:p-0 print:bg-transparent">
+
+        <!-- Letterhead -->
+        <div class="flex items-start justify-between pb-6 border-b border-border-soft mb-8">
+          <p class="text-2xl font-semibold text-text tracking-tight">{{ 'app.brand' | t }}</p>
+          <div class="text-right">
+            <h2 class="text-lg font-semibold text-text">{{ 'invoices.detail.documentTitle' | t }}</h2>
+            <p class="text-sm text-text-muted mt-1">{{ invoice()!.invoiceNumber }}</p>
+            <p class="mt-2 print:hidden"><span [class]="statusBadgeClass(invoice()!.status)">{{ i18n.t(statusKey(invoice()!.status)) }}</span></p>
+          </div>
+        </div>
+
+        <!-- Bill-to + meta -->
+        <div class="grid grid-cols-2 gap-8 mb-10">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">{{ 'invoices.detail.billTo' | t }}</p>
+            @if (customer(); as c) {
+              <p class="text-sm font-medium text-text">{{ c.name }}</p>
+              @if (c.street) {
+                <p class="text-sm text-text-muted">{{ c.street }} {{ c.houseNumber }}</p>
+              }
+              @if (c.zipCode || c.city) {
+                <p class="text-sm text-text-muted">{{ c.zipCode }} {{ c.city }}</p>
+              }
+              @if (c.country) {
+                <p class="text-sm text-text-muted">{{ c.country }}</p>
+              }
+              @if (c.email) {
+                <p class="text-sm text-text-muted mt-1">{{ c.email }}</p>
+              }
+            } @else {
+              <p class="text-sm text-text-muted">—</p>
+            }
+          </div>
+          <dl class="text-sm justify-self-end">
+            <div class="flex justify-end gap-3 py-0.5">
+              <dt class="text-text-muted">{{ 'invoices.col.issueDate' | t }}</dt>
+              <dd class="text-text w-28 text-right">{{ formatDate(invoice()!.issueDate) }}</dd>
+            </div>
+            <div class="flex justify-end gap-3 py-0.5">
+              <dt class="text-text-muted">{{ 'invoices.col.dueDate' | t }}</dt>
+              <dd class="text-text w-28 text-right">{{ formatDate(invoice()!.dueDate) }}</dd>
+            </div>
+            <div class="flex justify-end gap-3 py-0.5">
+              <dt class="text-text-muted">{{ 'invoices.detail.order' | t }}</dt>
+              <dd class="text-text w-28 text-right">
+                @if (order(); as o) {
+                  <a [routerLink]="['/orders', o.id]" class="text-primary hover:underline print:text-text print:no-underline">{{ o.orderNumber ?? o.id }}</a>
+                } @else {
+                  {{ invoice()!.orderId }}
+                }
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Line items -->
+        <table class="w-full text-sm mb-8">
+          <thead>
+            <tr class="border-b border-border-soft text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <th class="py-2 font-semibold">{{ 'orders.detail.col.item' | t }}</th>
+              <th class="py-2 font-semibold text-right">{{ 'orders.detail.col.quantity' | t }}</th>
+              <th class="py-2 font-semibold">{{ 'orders.detail.col.unit' | t }}</th>
+              <th class="py-2 font-semibold text-right">{{ 'orders.detail.col.unitPrice' | t }}</th>
+              <th class="py-2 font-semibold text-right">{{ 'orders.detail.col.lineTotal' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (it of orderItems(); track it.id) {
+              <tr class="border-b border-border-soft/60">
+                <td class="py-2 text-text">{{ it.itemName }}</td>
+                <td class="py-2 text-right text-text">{{ it.quantity }}</td>
+                <td class="py-2 text-text-muted">{{ it.unit }}</td>
+                <td class="py-2 text-right text-text">{{ formatCurrency(it.unitPrice) }}</td>
+                <td class="py-2 text-right text-text font-medium">{{ formatCurrency(it.lineTotal) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5" class="py-4 text-center text-text-muted">{{ 'orders.detail.noItems' | t }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <!-- Totals -->
+        <div class="flex justify-end mb-8">
+          <dl class="w-full max-w-xs text-sm">
+            <div class="flex justify-between py-1">
+              <dt class="text-text-muted">{{ 'invoices.detail.subtotal' | t }}</dt>
+              <dd class="text-text">{{ formatCurrency(invoice()!.subtotal) }}</dd>
+            </div>
+            <div class="flex justify-between py-1">
+              <dt class="text-text-muted">{{ 'invoices.detail.tax' | t }}</dt>
+              <dd class="text-text">{{ formatCurrency(invoice()!.taxAmount) }}</dd>
+            </div>
+            <div class="flex justify-between py-2 border-t border-border-soft mt-1">
+              <dt class="font-semibold text-text">{{ 'invoices.detail.total' | t }}</dt>
+              <dd class="font-semibold text-text">{{ formatCurrency(invoice()!.totalAmount) }}</dd>
+            </div>
+          </dl>
+        </div>
+
+        @if (invoice()!.paidAt || invoice()!.cancelledAt || invoice()!.notes) {
+          <div class="pt-6 border-t border-border-soft grid grid-cols-1 sm:grid-cols-2 gap-6">
+            @if (invoice()!.paidAt) {
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'invoices.detail.paidAt' | t }}</dt>
+                <dd class="text-sm text-text">{{ formatDate(invoice()!.paidAt) }}</dd>
+              </div>
+            }
+            @if (invoice()!.cancelledAt) {
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'invoices.detail.cancelledAt' | t }}</dt>
+                <dd class="text-sm text-text">{{ formatDate(invoice()!.cancelledAt) }}</dd>
+              </div>
+            }
+            @if (invoice()!.notes) {
+              <div class="sm:col-span-2">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'invoices.detail.notes' | t }}</dt>
+                <dd class="text-sm text-text whitespace-pre-line">{{ invoice()!.notes }}</dd>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+    }
+  </div>
+</div>

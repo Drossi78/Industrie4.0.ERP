@@ -1,0 +1,1324 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-stratiq2026v3",
+    "name": "Stratiq Backend API",
+    "description": "# Stratiq Backend REST API\n\nFull CRUD API for inventory, order management, production, stock tracking and RBAC.\n\n## Getting Started\n1. Set the `baseUrl` environment variable (default: `http://localhost:8080`)\n2. Run **Auth → Login** — the `token` and `refreshToken` are saved automatically\n3. All other requests inherit JWT Bearer auth from the collection root\n\n## Pagination\nPaginated endpoints accept:\n- `page` (0-based, default `0`)\n- `size` (default `20`)\n- `sort` (e.g. `createdAt,desc` or `stepOrder,asc`)\n\n## Auth\nJWT Bearer token, 24h expiry. Use **Auth → Refresh** to renew without re-login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Status is success (2xx)', function () {",
+          "  pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "description": "Authentication endpoints — login, refresh, change password.",
+      "item": [
+        {
+          "name": "Login",
+          "description": "Authenticate with email and password. On success, saves `token` and `refreshToken` to the active environment.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) {",
+            "  const j = pm.response.json();",
+            "  pm.environment.set('token', j.accessToken);",
+            "  pm.environment.set('refreshToken', j.refreshToken);",
+            "  pm.test('Token saved', () => pm.expect(j.accessToken).to.not.be.empty);",
+            "}"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@stratiq.com\",\n  \"password\": \"admin123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "description": "Exchange a refresh token for a new access token.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) {",
+            "  const j = pm.response.json();",
+            "  pm.environment.set('token', j.accessToken);",
+            "  pm.test('Token refreshed', () => pm.expect(j.accessToken).to.not.be.empty);",
+            "}"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","auth","refresh"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "description": "Change the authenticated user's password. Requires current password for verification.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"admin123\",\n  \"newPassword\": \"newSecurePass!\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/auth/change-password", "host": ["{{baseUrl}}"], "path": ["api","auth","change-password"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👥 Customers",
+      "description": "Manage customers. Paginated list supports `page`, `size`, `sort` query params.",
+      "item": [
+        {
+          "name": "List Customers",
+          "description": "Returns a paginated list of all customers.\n\n**Pagination params:**\n- `page` — 0-based page index (default: 0)\n- `size` — page size (default: 20)\n- `sort` — field,direction e.g. `name,asc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers?page=0&size=20&sort=name,asc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","customers"],
+              "query": [
+                { "key": "page", "value": "0", "description": "0-based page index" },
+                { "key": "size", "value": "20", "description": "Page size" },
+                { "key": "sort", "value": "name,asc", "description": "Sort field and direction (e.g. name,asc)" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer",
+          "description": "Fetch a single customer by UUID.",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","customers","{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Create Customer",
+          "description": "Create a new customer. Returns 201 with the created resource. The `id` is auto-saved to `customerId`.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('customerId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme GmbH\",\n  \"email\": \"contact@acme.de\",\n  \"phone\": \"+49 123 456789\",\n  \"taxId\": \"DE123456789\",\n  \"street\": \"Industriestr.\",\n  \"houseNumber\": \"12\",\n  \"zipCode\": \"35390\",\n  \"city\": \"Giessen\",\n  \"state\": \"Hessen\",\n  \"country\": \"Germany\",\n  \"notes\": \"Key account\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/customers", "host": ["{{baseUrl}}"], "path": ["api","v1","customers"] }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "description": "Update an existing customer. All fields are optional (partial update).",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme GmbH Updated\",\n  \"email\": \"new@acme.de\",\n  \"city\": \"Frankfurt\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","customers","{{customerId}}"] }
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "description": "Permanently delete a customer. Returns 204 No Content.",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","customers","{{customerId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏭 Warehouses",
+      "description": "Manage storage locations/warehouses. Paginated with default sort by `createdAt` DESC.",
+      "item": [
+        {
+          "name": "List Warehouses",
+          "description": "Returns a paginated list of warehouses sorted by creation date (newest first).\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","warehouses"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc", "description": "Default sort" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Warehouse",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","warehouses","{{warehouseId}}"] }
+          }
+        },
+        {
+          "name": "Create Warehouse",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('warehouseId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"description\": \"Primary storage facility\",\n  \"street\": \"Lagerstr.\",\n  \"houseNumber\": \"1\",\n  \"zipCode\": \"35390\",\n  \"city\": \"Giessen\",\n  \"state\": \"Hessen\",\n  \"country\": \"Germany\",\n  \"isActive\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/warehouses", "host": ["{{baseUrl}}"], "path": ["api","v1","warehouses"] }
+          }
+        },
+        {
+          "name": "Update Warehouse",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse Updated\",\n  \"isActive\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","warehouses","{{warehouseId}}"] }
+          }
+        },
+        {
+          "name": "Delete Warehouse",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","warehouses","{{warehouseId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🚚 Suppliers",
+      "description": "Manage suppliers/vendors. Paginated with default sort by `createdAt` DESC.",
+      "item": [
+        {
+          "name": "List Suppliers",
+          "description": "Returns a paginated list of suppliers sorted by creation date (newest first).\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/suppliers?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","suppliers"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Supplier",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/suppliers/{{supplierId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","suppliers","{{supplierId}}"] }
+          }
+        },
+        {
+          "name": "Create Supplier",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('supplierId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"TechParts GmbH\",\n  \"email\": \"orders@techparts.de\",\n  \"phone\": \"+49 641 999888\",\n  \"taxId\": \"DE987654321\",\n  \"street\": \"Lieferantenweg\",\n  \"houseNumber\": \"5\",\n  \"zipCode\": \"60313\",\n  \"city\": \"Frankfurt\",\n  \"state\": \"Hessen\",\n  \"country\": \"Germany\",\n  \"notes\": \"Preferred supplier for electronics\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/suppliers", "host": ["{{baseUrl}}"], "path": ["api","v1","suppliers"] }
+          }
+        },
+        {
+          "name": "Update Supplier",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"TechParts GmbH Updated\",\n  \"phone\": \"+49 641 000111\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/suppliers/{{supplierId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","suppliers","{{supplierId}}"] }
+          }
+        },
+        {
+          "name": "Delete Supplier",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/suppliers/{{supplierId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","suppliers","{{supplierId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏷️ Categories",
+      "description": "Asset/item categories. Paginated with default sort by `createdAt` DESC.",
+      "item": [
+        {
+          "name": "List Categories",
+          "description": "Returns a paginated list of categories.\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","categories"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Category",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","categories","{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Create Category",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('categoryId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Electronics\",\n  \"description\": \"Electronic components and devices\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/categories", "host": ["{{baseUrl}}"], "path": ["api","v1","categories"] }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Electronics Updated\",\n  \"description\": \"Updated description\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","categories","{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","categories","{{categoryId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📦 Assets",
+      "description": "Manage physical assets/products. Paginated list with optional category filter.",
+      "item": [
+        {
+          "name": "List Assets",
+          "description": "Returns a paginated list of all assets.\n\n**Pagination params:**\n- `page` (default: 0)\n- `size` (default: 20)\n- `sort` (e.g. `name,asc`)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/assets?page=0&size=20&sort=name,asc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","assets"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "name,asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Asset",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","assets","{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Create Asset",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('assetId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Laptop X200\",\n  \"categoryId\": \"{{categoryId}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/assets", "host": ["{{baseUrl}}"], "path": ["api","v1","assets"] }
+          }
+        },
+        {
+          "name": "Update Asset",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Laptop X200 Pro\",\n  \"categoryId\": \"{{categoryId}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","assets","{{assetId}}"] }
+          }
+        },
+        {
+          "name": "Delete Asset",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/assets/{{assetId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","assets","{{assetId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🧩 Items (Products/Components)",
+      "description": "Manage item master data (raw materials, finished goods). Non-paginated list; supports optional `categoryId` and `kind` filters.\n\n`kind` values: `OWN_PRODUCT`, `PURCHASED`",
+      "item": [
+        {
+          "name": "List Items",
+          "description": "Returns all items as a flat list (not paginated).\n\n**Optional filters:**\n- `categoryId` — filter by category UUID\n- `kind` — filter by kind: `OWN_PRODUCT` or `PURCHASED`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/items",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","items"],
+              "query": [
+                { "key": "categoryId", "value": "{{categoryId}}", "description": "Filter by category UUID", "disabled": true },
+                { "key": "kind", "value": "OWN_PRODUCT", "description": "OWN_PRODUCT or PURCHASED", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Item",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/items/{{itemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","items","{{itemId}}"] }
+          }
+        },
+        {
+          "name": "Create Item",
+          "description": "`kind` values: `OWN_PRODUCT`, `PURCHASED`",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('itemId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Steel Plate 10mm\",\n  \"kind\": \"PURCHASED\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"unit\": \"kg\",\n  \"price\": 4.50,\n  \"description\": \"High-grade steel plate\",\n  \"notes\": \"Bulk discount available\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/items", "host": ["{{baseUrl}}"], "path": ["api","v1","items"] }
+          }
+        },
+        {
+          "name": "Update Item",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Steel Plate 10mm Premium\",\n  \"price\": 5.00\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/items/{{itemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","items","{{itemId}}"] }
+          }
+        },
+        {
+          "name": "Delete Item",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/items/{{itemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","items","{{itemId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📋 Bills of Material (BOM)",
+      "description": "Bill of Materials — defines which components are required for a finished item. Non-paginated. **Required filter:** `itemId`.",
+      "item": [
+        {
+          "name": "List BOM by Item",
+          "description": "Returns all BOM entries for a given finished item. **`itemId` is required.**",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bom?itemId={{itemId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","bom"],
+              "query": [{ "key": "itemId", "value": "{{itemId}}", "description": "Required: the parent item UUID" }]
+            }
+          }
+        },
+        {
+          "name": "Get BOM Entry",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/bom/{{bomId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","bom","{{bomId}}"] }
+          }
+        },
+        {
+          "name": "Create BOM Entry",
+          "description": "Add a component to a finished item's BOM. `quantity` is the amount of component needed. `unit` is a free-text unit.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('bomId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"itemId\": \"{{itemId}}\",\n  \"componentId\": \"{{componentItemId}}\",\n  \"quantity\": 2.5,\n  \"unit\": \"kg\",\n  \"notes\": \"Required for frame assembly\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/bom", "host": ["{{baseUrl}}"], "path": ["api","v1","bom"] }
+          }
+        },
+        {
+          "name": "Delete BOM Entry",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/bom/{{bomId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","bom","{{bomId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📦 Batches",
+      "description": "Inventory batches — tracks stock per item/warehouse with expiry dates. Non-paginated list.",
+      "item": [
+        {
+          "name": "List Batches",
+          "description": "Returns all batches as a flat list (not paginated).",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/batches", "host": ["{{baseUrl}}"], "path": ["api","v1","batches"] }
+          }
+        },
+        {
+          "name": "Get Batch",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/batches/{{batchId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","batches","{{batchId}}"] }
+          }
+        },
+        {
+          "name": "Create Batch",
+          "description": "`expiryDate` format: `2026-12-31T00:00:00`",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('batchId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"batchNumber\": \"BATCH-2026-001\",\n  \"itemId\": \"{{itemId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"expiryDate\": \"2027-12-31T00:00:00\",\n  \"currentStock\": 100.0\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/batches", "host": ["{{baseUrl}}"], "path": ["api","v1","batches"] }
+          }
+        },
+        {
+          "name": "Update Batch",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentStock\": 90.0,\n  \"batchNumber\": \"BATCH-2026-001-REV\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/batches/{{batchId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","batches","{{batchId}}"] }
+          }
+        },
+        {
+          "name": "Delete Batch",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/batches/{{batchId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","batches","{{batchId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛒 Orders",
+      "description": "Customer orders management. Paginated with default sort by `createdAt` DESC.\n\n`status` values: `DRAFT`, `CONFIRMED`, `CANCELLED`, `COMPLETED`",
+      "item": [
+        {
+          "name": "List Orders",
+          "description": "Returns a paginated list of orders sorted by creation date (newest first).\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","orders","{{orderId}}"] }
+          }
+        },
+        {
+          "name": "Create Order",
+          "description": "`status` values: `DRAFT`, `CONFIRMED`, `CANCELLED`, `COMPLETED`\n`orderDate`/`expectedDate` format: `2026-05-27T10:00:00`",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('orderId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"orderNumber\": \"ORD-2026-001\",\n  \"status\": \"DRAFT\",\n  \"orderDate\": \"2026-05-27T10:00:00\",\n  \"expectedDate\": \"2026-06-10T10:00:00\",\n  \"totalAmount\": 1500.00,\n  \"notes\": \"Rush order\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/orders", "host": ["{{baseUrl}}"], "path": ["api","v1","orders"] }
+          }
+        },
+        {
+          "name": "Update Order",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"notes\": \"Confirmed by manager\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","orders","{{orderId}}"] }
+          }
+        },
+        {
+          "name": "Delete Order",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","orders","{{orderId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛍️ Order Items",
+      "description": "Line items belonging to an order. Paginated or flat-list filter by `orderId`.\n\n`unit` values: `piece`, `kg`, `g`, `l`, `ml`, `m`, `cm`, `m2`, `m3`, `hour`, `day`, `set`",
+      "item": [
+        {
+          "name": "List Order Items (paginated)",
+          "description": "Returns a paginated list of ALL order items across orders.\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/order-items?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","order-items"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Order Items by Order",
+          "description": "Returns all items for a specific order as a flat list (not paginated).",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/order-items?orderId={{orderId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","order-items"],
+              "query": [{ "key": "orderId", "value": "{{orderId}}", "description": "Filter items by order UUID" }]
+            }
+          }
+        },
+        {
+          "name": "Get Order Item",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/order-items/{{orderItemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-items","{{orderItemId}}"] }
+          }
+        },
+        {
+          "name": "Create Order Item",
+          "description": "`unit` values: `piece`, `kg`, `g`, `l`, `ml`, `m`, `cm`, `m2`, `m3`, `hour`, `day`, `set`",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('orderItemId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"assetId\": \"{{assetId}}\",\n  \"itemName\": \"Laptop X200\",\n  \"unit\": \"piece\",\n  \"quantity\": 5,\n  \"unitPrice\": 999.99,\n  \"notes\": \"Include warranty\",\n  \"supplierId\": \"{{supplierId}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/order-items", "host": ["{{baseUrl}}"], "path": ["api","v1","order-items"] }
+          }
+        },
+        {
+          "name": "Update Order Item",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 10,\n  \"unitPrice\": 950.00,\n  \"notes\": \"Bulk discount applied\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/order-items/{{orderItemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-items","{{orderItemId}}"] }
+          }
+        },
+        {
+          "name": "Delete Order Item",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/order-items/{{orderItemId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-items","{{orderItemId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "⚙️ Production Steps (Templates)",
+      "description": "Production step templates linked to assets. Paginated with default sort by `stepOrder` ASC.",
+      "item": [
+        {
+          "name": "List Production Steps",
+          "description": "Returns a paginated list of production step templates.\n\n**Default:** `size=20, sort=stepOrder,asc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/production-steps?page=0&size=20&sort=stepOrder,asc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","production-steps"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "stepOrder,asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Production Step",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/production-steps/{{productionStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","production-steps","{{productionStepId}}"] }
+          }
+        },
+        {
+          "name": "Create Production Step",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('productionStepId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"assetId\": \"{{assetId}}\",\n  \"name\": \"Assembly Step 1\",\n  \"description\": \"Mount the frame components\",\n  \"stepOrder\": 1,\n  \"notes\": \"Requires torque wrench\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/production-steps", "host": ["{{baseUrl}}"], "path": ["api","v1","production-steps"] }
+          }
+        },
+        {
+          "name": "Update Production Step",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Assembly Step 1 - Revised\",\n  \"description\": \"Updated assembly instructions\",\n  \"stepOrder\": 1\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/production-steps/{{productionStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","production-steps","{{productionStepId}}"] }
+          }
+        },
+        {
+          "name": "Delete Production Step",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/production-steps/{{productionStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","production-steps","{{productionStepId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔧 Order Production Steps",
+      "description": "Production steps attached to a specific order. Paginated or filtered by `orderId`.\n\n`status` values: `PENDING`, `IN_PROGRESS`, `DONE`",
+      "item": [
+        {
+          "name": "List Order Production Steps (paginated)",
+          "description": "Returns a paginated list of all order production steps.\n\n**Default:** `size=20, sort=stepOrder,asc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/order-production-steps?page=0&size=20&sort=stepOrder,asc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "stepOrder,asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Order Production Steps by Order",
+          "description": "Returns all production steps for a specific order as a flat list.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/order-production-steps?orderId={{orderId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps"],
+              "query": [{ "key": "orderId", "value": "{{orderId}}", "description": "Filter by order UUID" }]
+            }
+          }
+        },
+        {
+          "name": "Get Order Production Step",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/order-production-steps/{{orderProdStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps","{{orderProdStepId}}"] }
+          }
+        },
+        {
+          "name": "Create Order Production Step",
+          "description": "`status` values: `PENDING`, `IN_PROGRESS`, `DONE`\n`stepOrder` must be ≥ 1.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('orderProdStepId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderItemId\": \"{{orderItemId}}\",\n  \"templateStepId\": \"{{productionStepId}}\",\n  \"name\": \"Frame Assembly\",\n  \"description\": \"Assemble the main frame\",\n  \"stepOrder\": 1,\n  \"status\": \"PENDING\",\n  \"assignedTo\": null\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/order-production-steps", "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps"] }
+          }
+        },
+        {
+          "name": "Update Order Production Step",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"description\": \"Started frame assembly\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/order-production-steps/{{orderProdStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps","{{orderProdStepId}}"] }
+          }
+        },
+        {
+          "name": "Delete Order Production Step",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/order-production-steps/{{orderProdStepId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","order-production-steps","{{orderProdStepId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏗️ Production Workflow",
+      "description": "Higher-level production management — overview, step assignment, start/complete lifecycle.",
+      "item": [
+        {
+          "name": "Production Overview (paginated)",
+          "description": "Returns a paginated view of all order production steps across all orders.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/production/overview?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","production","overview"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Production Steps by Order",
+          "description": "Returns all production steps for a given order. Non-paginated flat list.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/production/steps?orderId={{orderId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","production","steps"],
+              "query": [{ "key": "orderId", "value": "{{orderId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Assign Step to User",
+          "description": "Assign a production step to a user (worker).",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/production/steps/{{orderProdStepId}}/assign?userId={{userId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","production","steps","{{orderProdStepId}}","assign"],
+              "query": [{ "key": "userId", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Start Production Step",
+          "description": "Mark a production step as IN_PROGRESS. Sets `startedAt` to current timestamp.",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/api/v1/production/steps/{{orderProdStepId}}/start", "host": ["{{baseUrl}}"], "path": ["api","v1","production","steps","{{orderProdStepId}}","start"] }
+          }
+        },
+        {
+          "name": "Complete Production Step",
+          "description": "Mark a production step as DONE. Sets `completedAt` to current timestamp.",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/api/v1/production/steps/{{orderProdStepId}}/complete", "host": ["{{baseUrl}}"], "path": ["api","v1","production","steps","{{orderProdStepId}}","complete"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🧾 Invoices",
+      "description": "Invoice management. Paginated with default sort by `createdAt` DESC.\n\n`status` values: `ISSUED`, `PAID`, `CANCELLED`",
+      "item": [
+        {
+          "name": "List Invoices",
+          "description": "Returns a paginated list of invoices sorted by creation date (newest first).\n\n**Default:** `size=20, sort=createdAt,desc`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","invoices"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "createdAt,desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/invoices/{{invoiceId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","invoices","{{invoiceId}}"] }
+          }
+        },
+        {
+          "name": "Create Invoice",
+          "description": "`status` values: `ISSUED`, `PAID`, `CANCELLED`\nDate format: `2026-05-27T10:00:00`",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('invoiceId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"invoiceNumber\": \"INV-2026-001\",\n  \"orderId\": \"{{orderId}}\",\n  \"status\": \"ISSUED\",\n  \"issueDate\": \"2026-05-27T10:00:00\",\n  \"dueDate\": \"2026-06-27T10:00:00\",\n  \"subtotal\": 4999.95,\n  \"taxAmount\": 949.99,\n  \"totalAmount\": 5949.94,\n  \"notes\": \"Payment due in 30 days\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/invoices", "host": ["{{baseUrl}}"], "path": ["api","v1","invoices"] }
+          }
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"PAID\",\n  \"notes\": \"Payment received via bank transfer\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/invoices/{{invoiceId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","invoices","{{invoiceId}}"] }
+          }
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/invoices/{{invoiceId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","invoices","{{invoiceId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Stock Movements",
+      "description": "Track all stock movements (IN/OUT/TRANSFER). Paginated list + filter shortcuts by `assetId`, `warehouseId`, `orderId`, or `type`.\n\n`type` values: `IN`, `OUT`, `TRANSFER`",
+      "item": [
+        {
+          "name": "List Stock Movements (paginated)",
+          "description": "Returns a paginated list of all stock movements.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock-movements?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by Asset",
+          "description": "Returns all stock movements for a specific asset (flat list).",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock-movements?assetId={{assetId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements"],
+              "query": [{ "key": "assetId", "value": "{{assetId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Filter by Warehouse",
+          "description": "Returns all stock movements for a specific warehouse (flat list).",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock-movements?warehouseId={{warehouseId}}",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements"],
+              "query": [{ "key": "warehouseId", "value": "{{warehouseId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Filter by Type",
+          "description": "Returns all stock movements of a specific type (flat list).\n\n`type` values: `IN`, `OUT`, `TRANSFER`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock-movements?type=IN",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements"],
+              "query": [{ "key": "type", "value": "IN", "description": "IN, OUT, or TRANSFER" }]
+            }
+          }
+        },
+        {
+          "name": "Get Stock Movement",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/stock-movements/{{stockMovementId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements","{{stockMovementId}}"] }
+          }
+        },
+        {
+          "name": "Create Stock Movement",
+          "description": "`type` values: `IN`, `OUT`, `TRANSFER`\n`orderId` is optional.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('stockMovementId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"Incoming goods from supplier\",\n  \"quantity\": 50,\n  \"type\": \"IN\",\n  \"assetId\": \"{{assetId}}\",\n  \"orderId\": null,\n  \"warehouseId\": \"{{warehouseId}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/stock-movements", "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements"] }
+          }
+        },
+        {
+          "name": "Update Stock Movement",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"Corrected quantity\",\n  \"quantity\": 48\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/stock-movements/{{stockMovementId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements","{{stockMovementId}}"] }
+          }
+        },
+        {
+          "name": "Delete Stock Movement",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/stock-movements/{{stockMovementId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","stock-movements","{{stockMovementId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📈 Stock (Inventory Control)",
+      "description": "Higher-level stock endpoints — movements view, inventory adjustments, and difference reports.",
+      "item": [
+        {
+          "name": "All Movements (paginated)",
+          "description": "Returns a paginated list of stock movements via the stock service.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock/movements?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock","movements"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stock Adjustment",
+          "description": "Create a corrective stock adjustment. Creates a stock movement record with the given quantity.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"assetId\": \"{{assetId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"quantity\": -5,\n  \"note\": \"Inventory correction after physical count\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/stock/adjustment", "host": ["{{baseUrl}}"], "path": ["api","v1","stock","adjustment"] }
+          }
+        },
+        {
+          "name": "Difference Report",
+          "description": "Returns a stock difference report. Optional filters:\n- `assetId` — filter by asset\n- `warehouseId` — filter by warehouse",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stock/report",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","stock","report"],
+              "query": [
+                { "key": "assetId", "value": "{{assetId}}", "disabled": true },
+                { "key": "warehouseId", "value": "{{warehouseId}}", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔑 Roles",
+      "description": "Role-based access control — manage roles. Non-paginated list (returns plain JSON array).",
+      "item": [
+        {
+          "name": "List Roles",
+          "description": "Returns all roles as a plain JSON array (not paginated).",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/roles", "host": ["{{baseUrl}}"], "path": ["api","v1","roles"] }
+          }
+        },
+        {
+          "name": "Get Role",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/roles/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","roles","{{roleId}}"] }
+          }
+        },
+        {
+          "name": "Create Role",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('roleId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"warehouse_manager\",\n  \"description\": \"Can manage inventory and stock movements\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/roles", "host": ["{{baseUrl}}"], "path": ["api","v1","roles"] }
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"warehouse_manager\",\n  \"description\": \"Updated description\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/roles/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","roles","{{roleId}}"] }
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/roles/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","roles","{{roleId}}"] }
+          }
+        },
+        {
+          "name": "Assign Permissions to Role",
+          "description": "Add permissions to a role. Send a list of `permissionIds` in the request body.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"permissionIds\": [\"{{permissionId}}\"]\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/roles/{{roleId}}/permissions", "host": ["{{baseUrl}}"], "path": ["api","v1","roles","{{roleId}}","permissions"] }
+          }
+        },
+        {
+          "name": "Remove Permissions from Role",
+          "description": "Remove permissions from a role. **Requires a request body** with the list of `permissionIds` to remove.",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"permissionIds\": [\"{{permissionId}}\"]\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/roles/{{roleId}}/permissions", "host": ["{{baseUrl}}"], "path": ["api","v1","roles","{{roleId}}","permissions"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Permissions",
+      "description": "Manage available permissions. Non-paginated list (returns plain JSON array).",
+      "item": [
+        {
+          "name": "List Permissions",
+          "description": "Returns all permissions as a plain JSON array (not paginated).",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/permissions", "host": ["{{baseUrl}}"], "path": ["api","v1","permissions"] }
+          }
+        },
+        {
+          "name": "Get Permission",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/permissions/{{permissionId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","permissions","{{permissionId}}"] }
+          }
+        },
+        {
+          "name": "Create Permission",
+          "description": "`codename` should be a unique machine-readable identifier (e.g. `inventory:read`).",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('permissionId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Inventory Read\",\n  \"codename\": \"inventory:read\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/permissions", "host": ["{{baseUrl}}"], "path": ["api","v1","permissions"] }
+          }
+        },
+        {
+          "name": "Delete Permission",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/permissions/{{permissionId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","permissions","{{permissionId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👤 Users",
+      "description": "User management. Paginated list.",
+      "item": [
+        {
+          "name": "List Users",
+          "description": "Returns a paginated list of all users.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","users"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","users","{{userId}}"] }
+          }
+        },
+        {
+          "name": "Create User",
+          "description": "Create a new user account. `roleId` links to an existing role.",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "  pm.environment.set('userId', pm.response.json().id);",
+            "}"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"worker@stratiq.de\",\n  \"password\": \"worker123!\",\n  \"roleId\": \"{{roleId}}\",\n  \"preferredLang\": \"de\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/users", "host": ["{{baseUrl}}"], "path": ["api","v1","users"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"preferredLang\": \"en\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","users","{{userId}}"] }
+          }
+        },
+        {
+          "name": "Change User Role",
+          "description": "Assign a different role to an existing user.",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"roleId\": \"{{roleId}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/v1/users/{{userId}}/role", "host": ["{{baseUrl}}"], "path": ["api","v1","users","{{userId}}","role"] }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/v1/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","users","{{userId}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📝 Audit Logs",
+      "description": "Read-only audit trail. Paginated with optional filters.\n\n**Filters (mutually exclusive):**\n- `userId` — all actions by a specific user\n- `entityType` + `entityId` — all actions on a specific entity",
+      "item": [
+        {
+          "name": "List All Audit Logs",
+          "description": "Returns a paginated list of all audit log entries.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs?page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","audit-logs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by User",
+          "description": "Returns audit log entries for a specific user (paginated).",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs?userId={{userId}}&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","audit-logs"],
+              "query": [
+                { "key": "userId", "value": "{{userId}}" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter by Entity",
+          "description": "Returns audit log entries for a specific entity (paginated).\n\n`entityType` example: `Customer`, `Order`, `Asset`",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs?entityType=Customer&entityId={{customerId}}&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api","v1","audit-logs"],
+              "query": [
+                { "key": "entityType", "value": "Customer", "description": "Entity class name (e.g. Customer, Order, Asset)" },
+                { "key": "entityId", "value": "{{customerId}}", "description": "Entity UUID" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+
+  ]
+}

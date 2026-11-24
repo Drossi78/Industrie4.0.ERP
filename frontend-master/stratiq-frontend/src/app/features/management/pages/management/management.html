@@ -1,0 +1,306 @@
+<app-navbar [showBack]="true"></app-navbar>
+
+<div class="page-shell">
+  <h1 class="page-title">{{ 'management.title' | t }}</h1>
+  <p class="page-subtitle">{{ 'management.subtitle' | t }}</p>
+
+  <!-- Tab bar + action button -->
+  <div class="mt-8 flex items-end justify-between border-b border-border">
+    <div class="flex gap-1">
+      @if (canViewUsers()) {
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'users'"
+          (click)="switchTab('users')"
+        >
+          {{ 'management.tab.users' | t }}
+        </button>
+      }
+      @if (canViewCustomers()) {
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'customers'"
+          (click)="switchTab('customers')"
+        >
+          {{ 'management.tab.customers' | t }}
+        </button>
+      }
+      @if (canViewSuppliers()) {
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'suppliers'"
+          (click)="switchTab('suppliers')"
+        >
+          {{ 'management.tab.suppliers' | t }}
+        </button>
+      }
+      @if (canViewWarehouses()) {
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'warehouses'"
+          (click)="switchTab('warehouses')"
+        >
+          {{ 'management.tab.warehouses' | t }}
+        </button>
+      }
+    </div>
+
+    @if (canCreateActiveTab()) {
+      <button class="fluent-button-primary mb-2" (click)="openModal()">
+        {{ 'management.action.new' | t }}
+      </button>
+    }
+  </div>
+
+  <!-- Tables -->
+  <div class="mt-6">
+    @if (activeTab() === 'users') {
+      <app-data-table
+        [columns]="userColumns"
+        [page]="usersPage()"
+        [loading]="loading()"
+        (queryChange)="onQuery($event)"
+        (rowClick)="openUser($event)"
+      />
+    }
+    @if (activeTab() === 'customers') {
+      <app-data-table
+        [columns]="customerColumns"
+        [page]="customersPage()"
+        [loading]="loading()"
+        (queryChange)="onQuery($event)"
+        (rowClick)="openCustomer($event)"
+      />
+    }
+    @if (activeTab() === 'suppliers') {
+      <app-data-table
+        [columns]="supplierColumns"
+        [page]="suppliersPage()"
+        [loading]="loading()"
+        (queryChange)="onQuery($event)"
+        (rowClick)="openSupplier($event)"
+      />
+    }
+    @if (activeTab() === 'warehouses') {
+      <app-data-table
+        [columns]="warehouseColumns"
+        [page]="warehousesPage()"
+        [loading]="loading()"
+        (queryChange)="onQuery($event)"
+        (rowClick)="openWarehouse($event)"
+      />
+    }
+  </div>
+</div>
+
+<!-- Modal overlay -->
+@if (showModal()) {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+
+      <div class="modal-header">
+        <h2 class="modal-title">
+          @if (activeTab() === 'users')      { {{ 'management.modal.title.user'      | t }} }
+          @if (activeTab() === 'customers')  { {{ 'management.modal.title.customer'  | t }} }
+          @if (activeTab() === 'suppliers')  { {{ 'management.modal.title.supplier'  | t }} }
+          @if (activeTab() === 'warehouses') { {{ 'management.modal.title.warehouse' | t }} }
+        </h2>
+        <button class="modal-close" (click)="closeModal()" aria-label="Schließen">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- User form -->
+      @if (activeTab() === 'users') {
+        <form class="modal-form" [formGroup]="userForm" (ngSubmit)="submit()" novalidate>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.email' | t }}</span>
+            <input class="form-input" type="email" formControlName="email" autocomplete="off" />
+            @if (userForm.controls.email.touched && userForm.controls.email.invalid) {
+              <span class="form-error">{{ 'management.form.error.emailRequired' | t }}</span>
+            }
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.password' | t }}</span>
+            <input class="form-input" type="password" formControlName="password" autocomplete="new-password" />
+            @if (userForm.controls.password.touched && userForm.controls.password.invalid) {
+              <span class="form-error">{{ 'management.form.error.passwordMin' | t }}</span>
+            }
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.role' | t }}</span>
+            <select class="form-input" formControlName="roleId">
+              <option value="">—</option>
+              @for (role of roles(); track role.id) {
+                <option [value]="role.id">{{ role.name }}</option>
+              }
+            </select>
+            @if (userForm.controls.roleId.touched && userForm.controls.roleId.invalid) {
+              <span class="form-error">{{ 'management.form.error.required' | t }}</span>
+            }
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.lang' | t }}</span>
+            <select class="form-input" formControlName="preferredLang">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="fluent-button-ghost" (click)="closeModal()">{{ 'management.form.cancel' | t }}</button>
+            <button type="submit" class="fluent-button-primary" [disabled]="submitting()">{{ 'management.form.save' | t }}</button>
+          </div>
+        </form>
+      }
+
+      <!-- Customer form -->
+      @if (activeTab() === 'customers') {
+        <form class="modal-form" [formGroup]="customerForm" (ngSubmit)="submit()" novalidate>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.name' | t }}</span>
+            <input class="form-input" type="text" formControlName="name" />
+            @if (customerForm.controls.name.touched && customerForm.controls.name.invalid) {
+              <span class="form-error">{{ 'management.form.error.required' | t }}</span>
+            }
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.email' | t }}</span>
+              <input class="form-input" type="email" formControlName="email" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.phone' | t }}</span>
+              <input class="form-input" type="text" formControlName="phone" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.city' | t }}</span>
+              <input class="form-input" type="text" formControlName="city" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.country' | t }}</span>
+              <input class="form-input" type="text" formControlName="country" />
+            </label>
+          </div>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.taxId' | t }}</span>
+            <input class="form-input" type="text" formControlName="taxId" />
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.notes' | t }}</span>
+            <textarea class="form-input form-textarea" formControlName="notes"></textarea>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="fluent-button-ghost" (click)="closeModal()">{{ 'management.form.cancel' | t }}</button>
+            <button type="submit" class="fluent-button-primary" [disabled]="submitting()">{{ 'management.form.save' | t }}</button>
+          </div>
+        </form>
+      }
+
+      <!-- Supplier form -->
+      @if (activeTab() === 'suppliers') {
+        <form class="modal-form" [formGroup]="supplierForm" (ngSubmit)="submit()" novalidate>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.name' | t }}</span>
+            <input class="form-input" type="text" formControlName="name" />
+            @if (supplierForm.controls.name.touched && supplierForm.controls.name.invalid) {
+              <span class="form-error">{{ 'management.form.error.required' | t }}</span>
+            }
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.email' | t }}</span>
+              <input class="form-input" type="email" formControlName="email" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.phone' | t }}</span>
+              <input class="form-input" type="text" formControlName="phone" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.city' | t }}</span>
+              <input class="form-input" type="text" formControlName="city" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'management.form.country' | t }}</span>
+              <input class="form-input" type="text" formControlName="country" />
+            </label>
+          </div>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.taxId' | t }}</span>
+            <input class="form-input" type="text" formControlName="taxId" />
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'management.form.notes' | t }}</span>
+            <textarea class="form-input form-textarea" formControlName="notes"></textarea>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="fluent-button-ghost" (click)="closeModal()">{{ 'management.form.cancel' | t }}</button>
+            <button type="submit" class="fluent-button-primary" [disabled]="submitting()">{{ 'management.form.save' | t }}</button>
+          </div>
+        </form>
+      }
+
+      <!-- Warehouse form -->
+      @if (activeTab() === 'warehouses') {
+        <form class="modal-form" [formGroup]="warehouseForm" (ngSubmit)="submit()" novalidate>
+          <label class="form-field">
+            <span class="form-label">{{ 'warehouses.form.name' | t }}</span>
+            <input class="form-input" type="text" formControlName="name" />
+            @if (warehouseForm.controls.name.touched && warehouseForm.controls.name.invalid) {
+              <span class="form-error">{{ 'management.form.error.required' | t }}</span>
+            }
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'warehouses.form.description' | t }}</span>
+            <textarea class="form-input form-textarea" formControlName="description"></textarea>
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.street' | t }}</span>
+              <input class="form-input" type="text" formControlName="street" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.houseNumber' | t }}</span>
+              <input class="form-input" type="text" formControlName="houseNumber" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.zipCode' | t }}</span>
+              <input class="form-input" type="text" formControlName="zipCode" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.city' | t }}</span>
+              <input class="form-input" type="text" formControlName="city" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.state' | t }}</span>
+              <input class="form-input" type="text" formControlName="state" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">{{ 'warehouses.form.country' | t }}</span>
+              <input class="form-input" type="text" formControlName="country" />
+            </label>
+          </div>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" formControlName="isActive" />
+            {{ 'warehouses.form.active' | t }}
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="fluent-button-ghost" (click)="closeModal()">{{ 'management.form.cancel' | t }}</button>
+            <button type="submit" class="fluent-button-primary" [disabled]="submitting()">{{ 'management.form.save' | t }}</button>
+          </div>
+        </form>
+      }
+
+    </div>
+  </div>
+}

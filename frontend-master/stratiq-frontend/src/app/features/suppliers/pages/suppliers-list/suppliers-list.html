@@ -1,0 +1,20 @@
+<div class="page-shell">
+  <a routerLink="/dashboard" class="back-btn">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4">
+      <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+    </svg>
+    Dashboard
+  </a>
+  <h1 class="page-title">{{ 'suppliers.title' | t }}</h1>
+  <p class="page-subtitle">{{ 'suppliers.subtitle' | t }}</p>
+
+  <div class="mt-8">
+    <app-data-table
+      [columns]="columns"
+      [filters]="filterDefs"
+      [page]="page()"
+      [loading]="loading()"
+      (queryChange)="onQuery($event)"
+    />
+  </div>
+</div>

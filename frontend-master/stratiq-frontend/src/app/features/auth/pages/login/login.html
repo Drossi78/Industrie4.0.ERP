@@ -1,0 +1,62 @@
+<div class="login-shell">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="login-brand-mark" aria-hidden="true"></span>
+      <span class="login-brand-text">{{ 'app.brand' | t }}</span>
+    </div>
+
+    <h1 class="login-title">{{ 'login.title' | t }}</h1>
+    <p class="login-subtitle">{{ 'login.subtitle' | t }}</p>
+
+    <form class="login-form" (ngSubmit)="submit()" [formGroup]="form" novalidate>
+      <label class="login-field">
+        <span class="login-label">{{ 'login.username' | t }}</span>
+        <input
+          class="login-input"
+          type="text"
+          autocomplete="username"
+          formControlName="username"
+          [attr.aria-invalid]="form.controls.username.invalid && form.controls.username.touched"
+        />
+        @if (form.controls.username.touched && form.controls.username.errors?.['required']) {
+          <span class="login-hint login-hint--error">{{ 'login.validation.usernameRequired' | t }}</span>
+        }
+      </label>
+
+      <label class="login-field">
+        <span class="login-label">{{ 'login.password' | t }}</span>
+        <input
+          class="login-input"
+          type="password"
+          autocomplete="current-password"
+          formControlName="password"
+          [attr.aria-invalid]="form.controls.password.invalid && form.controls.password.touched"
+        />
+        @if (form.controls.password.touched && form.controls.password.errors?.['required']) {
+          <span class="login-hint login-hint--error">{{ 'login.validation.passwordRequired' | t }}</span>
+        }
+      </label>
+
+      @if (errorKey(); as key) {
+        <p class="login-banner" role="alert">{{ key | t }}</p>
+      }
+
+      <button class="fluent-button-primary login-submit" type="submit" [disabled]="submitting()">
+        {{ 'login.submit' | t }}
+      </button>
+    </form>
+
+    <div class="login-lang" role="group" [attr.aria-label]="'login.language' | t">
+      @for (opt of languages; track opt.id) {
+        <button
+          type="button"
+          class="login-lang-btn"
+          [class.login-lang-btn--active]="i18n.language() === opt.id"
+          (click)="onLangChange(opt.id)"
+        >
+          {{ opt.labelKey | t }}
+        </button>
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,153 @@
+<div class="app-layout flex flex-col min-h-screen">
+  <app-navbar [showBack]="true"></app-navbar>
+
+  <div class="page-content flex-1">
+    @if (loading()) {
+      <div class="flex items-center justify-center py-32 text-text-muted text-sm">
+        {{ 'table.loading' | t }}
+      </div>
+    } @else if (!user()) {
+      <div class="flex items-center justify-center py-32 text-text-muted text-sm">
+        {{ 'management.error.userNotFound' | t }}
+      </div>
+    } @else {
+
+      <!-- Header -->
+      <div class="flex items-start justify-between mb-8">
+        <div>
+          <h1 class="page-title">{{ user()!.email }}</h1>
+          <p class="page-subtitle mt-1">
+            <span class="fluent-badge">{{ user()!.roleName }}</span>
+            @if (!user()!.isActive) {
+              <span class="fluent-badge-neutral ml-2">{{ 'management.label.inactiveUser' | t }}</span>
+            }
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 mt-1">
+          @if (!editing()) {
+            @if (canDelete()) {
+              <button
+                (click)="confirmDelete()"
+                [disabled]="deleting()"
+                class="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-danger/30 bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger/5 transition-colors disabled:opacity-50"
+              >
+                {{ 'management.btn.delete' | t }}
+              </button>
+            }
+            @if (canEdit()) {
+              <button
+                (click)="startEditing()"
+                class="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:bg-surface-muted transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                </svg>
+                {{ 'management.btn.edit' | t }}
+              </button>
+            }
+          } @else {
+            <button
+              (click)="cancelEditing()"
+              class="rounded-[var(--radius-control)] px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-muted transition-colors"
+            >
+              {{ 'management.form.cancel' | t }}
+            </button>
+            <button
+              (click)="saveEditing()"
+              [disabled]="saving()"
+              class="fluent-button-primary disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+            >
+              @if (saving()) {
+                <svg class="size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+              }
+              {{ 'management.form.save' | t }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (serverError()) {
+        <div class="mb-6 rounded-[var(--radius-control)] border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+          {{ serverError()! | t }}
+        </div>
+      }
+
+      <div class="fluent-card p-6">
+        @if (!editing()) {
+          <!-- Read mode -->
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+            <div>
+              <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'management.form.email' | t }}</dt>
+              <dd class="text-sm text-text font-medium">{{ user()!.email }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'management.form.role' | t }}</dt>
+              <dd class="text-sm text-text">{{ user()!.roleName }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'management.form.lang' | t }}</dt>
+              <dd class="text-sm text-text">{{ user()!.preferredLang.toUpperCase() }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'management.col.active' | t }}</dt>
+              <dd class="text-sm text-text">{{ user()!.isActive ? '✓' : '—' }}</dd>
+            </div>
+          </dl>
+        } @else {
+          <!-- Edit mode -->
+          <form [formGroup]="form" (ngSubmit)="saveEditing()" novalidate class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+                {{ 'management.form.email' | t }} <span class="text-danger">*</span>
+              </label>
+              <input
+                formControlName="email"
+                type="email"
+                class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+                [class.border-danger]="form.get('email')?.invalid && form.get('email')?.touched"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+                {{ 'management.form.role' | t }} <span class="text-danger">*</span>
+              </label>
+              <select
+                formControlName="roleId"
+                class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                @for (role of roles(); track role.id) {
+                  <option [value]="role.id">{{ role.name }}</option>
+                }
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">{{ 'management.form.lang' | t }}</label>
+              <select
+                formControlName="preferredLang"
+                class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+              </select>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <input type="checkbox" formControlName="isActive" />
+              {{ 'management.col.active' | t }}
+            </label>
+
+          </form>
+        }
+      </div>
+
+    }
+  </div>
+</div>

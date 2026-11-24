@@ -1,0 +1,128 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <!-- Backdrop -->
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelled.emit()"></div>
+
+  <!-- Card -->
+  <div class="relative z-10 fluent-card w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
+    <h2 class="text-lg font-semibold text-text mb-6">{{ 'items.dialog.create.title' | t }}</h2>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate class="flex flex-col gap-4">
+
+      <!-- Name -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'items.form.name' | t }} <span class="text-danger">*</span>
+        </label>
+        <input
+          formControlName="name"
+          type="text"
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          [class.border-danger]="form.get('name')?.invalid && form.get('name')?.touched"
+        />
+        @if (form.get('name')?.errors?.['required'] && form.get('name')?.touched) {
+          <p class="mt-1 text-xs text-danger">{{ 'items.validation.nameRequired' | t }}</p>
+        }
+      </div>
+
+      <!-- Kind -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">
+          {{ 'items.form.kind' | t }} <span class="text-danger">*</span>
+        </label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="radio" formControlName="kind" value="PURCHASED" class="accent-primary" />
+            {{ 'items.kind.purchased' | t }}
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="radio" formControlName="kind" value="OWN_PRODUCT" class="accent-primary" />
+            {{ 'items.kind.ownProduct' | t }}
+          </label>
+        </div>
+      </div>
+
+      <!-- Unit -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'items.form.unit' | t }} <span class="text-danger">*</span>
+        </label>
+        <input
+          formControlName="unit"
+          type="text"
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          [class.border-danger]="form.get('unit')?.invalid && form.get('unit')?.touched"
+        />
+        @if (form.get('unit')?.errors?.['required'] && form.get('unit')?.touched) {
+          <p class="mt-1 text-xs text-danger">{{ 'items.validation.unitRequired' | t }}</p>
+        }
+      </div>
+
+      <!-- Price -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'items.form.price' | t }}
+        </label>
+        <input
+          formControlName="price"
+          type="number"
+          min="0"
+          step="0.01"
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'items.form.description' | t }}
+        </label>
+        <textarea
+          formControlName="description"
+          rows="3"
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'items.form.notes' | t }}
+        </label>
+        <textarea
+          formControlName="notes"
+          rows="2"
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+        ></textarea>
+      </div>
+
+      @if (serverError()) {
+        <p class="text-sm text-danger">{{ serverError()! | t }}</p>
+      }
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3 mt-2">
+        <button
+          type="button"
+          (click)="cancelled.emit()"
+          class="rounded-[var(--radius-control)] px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-muted transition-colors"
+        >
+          {{ 'items.btn.cancel' | t }}
+        </button>
+        <button
+          type="submit"
+          [disabled]="saving()"
+          class="fluent-button-primary disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+        >
+          @if (saving()) {
+            <svg class="size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          }
+          {{ 'items.dialog.create.submit' | t }}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

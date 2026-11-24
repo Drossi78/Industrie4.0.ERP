@@ -1,0 +1,110 @@
+@reference "../../../../../styles.css";
+
+.login-shell {
+  @apply min-h-screen flex items-center justify-center p-6;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(93, 135, 255, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 8%, rgba(75, 104, 255, 0.1), transparent 38%),
+    linear-gradient(180deg, #f5f8ff 0%, #ffffff 55%, #eef3ff 100%);
+}
+
+.login-card {
+  @apply w-full max-w-md rounded-2xl border border-white/80 bg-white p-8 shadow-[0_16px_48px_rgba(17,24,39,0.08)];
+}
+
+.login-brand {
+  @apply mb-8 flex items-center gap-2 text-sm font-medium;
+  color: var(--color-text);
+}
+
+.login-brand-mark {
+  @apply inline-flex h-8 w-8 rounded-lg;
+  background: linear-gradient(180deg, #5d87ff 0%, #4b68ff 100%);
+  box-shadow: 0 8px 22px rgba(75, 104, 255, 0.28);
+}
+
+.login-brand-text {
+  @apply lowercase tracking-tight;
+  color: var(--color-text-muted);
+}
+
+.login-title {
+  @apply text-3xl font-semibold tracking-tight;
+  color: var(--color-text);
+}
+
+.login-subtitle {
+  @apply mt-2 text-sm;
+  color: var(--color-text-muted);
+}
+
+.login-form {
+  @apply mt-8 flex flex-col gap-5;
+}
+
+.login-field {
+  @apply flex flex-col gap-1.5;
+}
+
+.login-label {
+  @apply text-xs font-semibold uppercase tracking-[0.08em];
+  color: var(--color-text-muted);
+}
+
+.login-input {
+  @apply w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition;
+  border-color: #e5e7eb;
+  color: var(--color-text);
+  background: #fff;
+}
+
+.login-input:focus {
+  border-color: #5d87ff;
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.2);
+}
+
+.login-hint {
+  @apply text-xs;
+}
+
+.login-hint--error {
+  color: var(--color-danger);
+}
+
+.login-banner {
+  @apply rounded-xl px-3 py-2 text-sm;
+  background: rgba(217, 75, 75, 0.08);
+  color: var(--color-danger);
+}
+
+.login-submit {
+  @apply mt-2 w-full justify-center;
+}
+
+.login-submit:disabled {
+  @apply cursor-not-allowed opacity-60;
+  transform: none;
+  box-shadow: none;
+}
+
+.login-lang {
+  @apply mt-8 flex flex-wrap gap-2 border-t border-[#e5e7eb] pt-6;
+}
+
+.login-lang-btn {
+  @apply rounded-lg px-3 py-1.5 text-xs font-medium transition;
+  color: var(--color-text-muted);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.login-lang-btn:hover {
+  border-color: #c7d2fe;
+  color: var(--color-text);
+}
+
+.login-lang-btn--active {
+  background: var(--color-primary-soft);
+  border-color: rgba(93, 135, 255, 0.35);
+  color: #4b68ff;
+}

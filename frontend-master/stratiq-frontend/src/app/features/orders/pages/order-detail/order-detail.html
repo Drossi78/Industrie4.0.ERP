@@ -1,0 +1,265 @@
+<app-navbar [showBack]="true"></app-navbar>
+
+<div class="page-shell">
+
+  @if (loading() && !order()) {
+    <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'table.loading' | t }}
+    </div>
+  } @else if (order(); as o) {
+
+    <!-- Header -->
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="page-title">
+          {{ 'orders.detail.title' | t }} {{ o.orderNumber || o.id }}
+        </h1>
+        <div class="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-muted">
+          <span [class]="statusBadgeClass(o.status)">{{ statusKey(o.status) | t }}</span>
+          @if (!locked() && canEdit()) {
+            <label class="inline-flex items-center gap-2">
+              <span>{{ 'orders.detail.status' | t }}:</span>
+              <select class="status-select" [disabled]="updatingStatus()"
+                      (change)="changeStatus($any($event.target).value)">
+                @for (s of statuses; track s) {
+                  <option [value]="s" [selected]="s === o.status">{{ statusKey(s) | t }}</option>
+                }
+              </select>
+            </label>
+          } @if(locked()) {
+            <span class="text-xs font-medium text-text-muted">{{ 'orders.detail.locked' | t }}</span>
+          }
+          <span>{{ 'orders.col.orderDate' | t }}: {{ formatDate(o.orderDate) }}</span>
+          <span>{{ 'orders.col.expectedDate' | t }}: {{ formatDate(o.expectedDate) }}</span>
+        </div>
+      </div>
+      @if (!locked() && canEdit()) {
+        <button class="fluent-button-primary" (click)="openFulfill()" [disabled]="items().length === 0">
+          {{ 'orders.detail.fulfill' | t }}
+        </button>
+      }
+    </div>
+
+    @if (statusError(); as err) {
+      <p class="form-banner mt-3">{{ err | t }}</p>
+    }
+
+    <!-- Line items -->
+    <h2 class="mt-8 text-lg font-semibold text-text">{{ 'orders.detail.items' | t }}</h2>
+    <div class="mt-3 fluent-card overflow-x-auto">
+      @if (items().length === 0) {
+        <div class="flex items-center justify-center py-12 text-text-muted text-sm">
+          {{ 'orders.detail.noItems' | t }}
+        </div>
+      } @else {
+        <table class="fluent-table">
+          <thead>
+            <tr>
+              <th>{{ 'orders.detail.col.item' | t }}</th>
+              <th>{{ 'orders.detail.col.quantity' | t }}</th>
+              <th>{{ 'orders.detail.col.unit' | t }}</th>
+              <th>{{ 'orders.detail.col.unitPrice' | t }}</th>
+              <th>{{ 'orders.detail.col.lineTotal' | t }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (it of items(); track it.id) {
+              <tr class="fluent-row">
+                <td class="fluent-cell-primary">{{ it.itemName }}</td>
+                <td class="fluent-cell">{{ it.quantity.toLocaleString('de-DE') }}</td>
+                <td class="fluent-cell">{{ it.unit }}</td>
+                <td class="fluent-cell">{{ formatCurrency(it.unitPrice) }}</td>
+                <td class="fluent-cell">{{ formatCurrency(it.lineTotal) }}</td>
+                <td class="fluent-cell text-right">
+                  @if (!locked() && canEdit()) {
+                    <button class="btn-secondary btn-sm" (click)="removeItem(it.id)" [disabled]="removingId() === it.id">{{ 'orders.detail.remove' | t }}</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+      @if (deleteError(); as err) {
+        <p class="form-banner m-4">{{ err | t }}</p>
+      }
+    </div>
+
+    <!-- Booked stock movements (goods receipt / issue) with their batches -->
+    @if (movements().length > 0) {
+      <h2 class="mt-8 text-lg font-semibold text-text">{{ 'orders.detail.movements' | t }}</h2>
+      <div class="mt-3 fluent-card overflow-x-auto">
+        <table class="fluent-table">
+          <thead>
+            <tr>
+              <th>{{ 'orders.detail.movements.direction' | t }}</th>
+              <th>{{ 'orders.detail.movements.quantity' | t }}</th>
+              <th>{{ 'stock.book.batch' | t }}</th>
+              <th>{{ 'stock.book.expiryDate' | t }}</th>
+              <th>{{ 'orders.detail.movements.date' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of movements(); track m.id) {
+              <tr class="fluent-row">
+                <td class="fluent-cell">
+                  <span [class]="m.type === 'IN' ? 'fluent-badge-success' : 'fluent-badge'">
+                    {{ (m.type === 'IN' ? 'stock.book.receipt' : 'stock.book.issue') | t }}
+                  </span>
+                </td>
+                <td class="fluent-cell">{{ m.quantity.toLocaleString('de-DE') }}</td>
+                <td class="fluent-cell-primary">{{ m.batchNumber || '—' }}</td>
+                <td class="fluent-cell">{{ m.expiryDate ? formatDate(m.expiryDate) : '—' }}</td>
+                <td class="fluent-cell">{{ formatDate(m.createdAt) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- Add item -->
+    @if (!locked() && canEdit()) {
+    <h2 class="mt-8 text-lg font-semibold text-text">{{ 'orders.detail.addItem' | t }}</h2>
+    <form class="mt-3 fluent-card flex flex-wrap items-end gap-4 p-5" [formGroup]="addForm" (ngSubmit)="submitAdd()" novalidate>
+      <label class="form-field grow">
+        <span class="form-label">{{ 'orders.detail.col.item' | t }}</span>
+        <select class="form-input" formControlName="itemId">
+          <option value="">—</option>
+          @for (i of stockItems(); track i.itemId) {
+            <option [value]="i.itemId">{{ i.itemName }}</option>
+          }
+        </select>
+      </label>
+      <label class="form-field w-28">
+        <span class="form-label">{{ 'orders.detail.col.quantity' | t }}</span>
+        <input class="form-input" type="number" min="0.001" step="0.001" formControlName="quantity" />
+      </label>
+      <label class="form-field w-28">
+        <span class="form-label">{{ 'orders.detail.col.unit' | t }}</span>
+        <select class="form-input" formControlName="unit">
+          @for (u of units; track u) {
+            <option [value]="u">{{ u }}</option>
+          }
+        </select>
+      </label>
+      <label class="form-field w-32">
+        <span class="form-label">{{ 'orders.detail.col.unitPrice' | t }}</span>
+        <input class="form-input" type="number" min="0" step="0.01" formControlName="unitPrice" />
+      </label>
+      <button type="submit" class="fluent-button-primary" [disabled]="adding()">{{ 'orders.detail.add' | t }}</button>
+      @if (addError(); as err) {
+        <p class="form-banner w-full">{{ err | t }}</p>
+      }
+    </form>
+    }
+
+  } @else {
+    <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'orders.detail.notFound' | t }}
+    </div>
+  }
+</div>
+
+<!-- Fulfill modal -->
+@if (showFulfill()) {
+  <div class="modal-backdrop" (click)="closeFulfill()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'orders.detail.fulfill' | t }}</h2>
+        <button class="modal-close" (click)="closeFulfill()" aria-label="Schließen">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </button>
+      </div>
+
+      @if (fulfillDone(); as count) {
+        <div class="p-6">
+          <p class="rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-primary">
+            {{ 'orders.detail.fulfill.done' | t }} ({{ count }})
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="fluent-button-primary" (click)="closeFulfill()">{{ 'orders.detail.close' | t }}</button>
+          </div>
+        </div>
+      } @else {
+        <form class="modal-form" [formGroup]="fulfillForm" (ngSubmit)="submitFulfill()" novalidate>
+          <label class="form-field">
+            <span class="form-label">{{ 'stock.book.direction' | t }}</span>
+            <!-- Direction is fixed by the order (chosen at creation), shown read-only. -->
+            <input class="form-input" type="text" readonly
+              [value]="(fulfillForm.controls.direction.value === 'IN' ? 'orders.direction.in' : 'orders.direction.out') | t" />
+          </label>
+
+          @if (fulfillForm.controls.direction.value === 'IN') {
+            <label class="form-field">
+              <span class="form-label">{{ 'stock.book.warehouse' | t }}</span>
+              <select class="form-input" formControlName="warehouseId">
+                <option value="">—</option>
+                @for (w of warehouses(); track w.id) {
+                  <option [value]="w.id">{{ w.name }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <!-- Per-item stock distribution across warehouses -->
+          <div class="flex flex-col gap-2">
+            <span class="form-label">{{ 'orders.detail.distribution' | t }}</span>
+            @for (it of items(); track it.id) {
+              <div class="dist-row">
+                <div class="text-sm font-medium text-text">
+                  {{ it.itemName }}
+                  <span class="text-xs text-text-muted">({{ 'orders.detail.ordered' | t }}: {{ it.quantity.toLocaleString('de-DE') }})</span>
+                </div>
+                <div class="mt-0.5 text-xs text-text-muted">
+                  @for (w of distFor(it.itemId); track w.warehouseId) {
+                    <span class="mr-3">{{ w.warehouseName }}: {{ w.balance.toLocaleString('de-DE') }}</span>
+                  } @empty {
+                    <span class="mr-3">{{ 'orders.detail.noStockAsset' | t }}</span>
+                  }
+                  <span class="font-semibold" [class.dist-short]="distTotal(it.itemId) < it.quantity">
+                    · {{ 'orders.detail.total' | t }}: {{ distTotal(it.itemId).toLocaleString('de-DE') }}
+                  </span>
+                </div>
+
+                <!-- Batch entry per item, only for goods receipt (IN) -->
+                @if (fulfillForm.controls.direction.value === 'IN') {
+                  <div class="mt-2 flex gap-2">
+                    <input
+                      class="form-input"
+                      type="text"
+                      [placeholder]="'stock.book.batchNumber' | t"
+                      [value]="batchNumberOf(it.itemId)"
+                      (input)="setBatchNumber(it.itemId, $any($event.target).value)"
+                    />
+                    <input
+                      class="form-input"
+                      type="date"
+                      [title]="'stock.book.expiryDate' | t"
+                      [value]="expiryOf(it.itemId)"
+                      (input)="setExpiry(it.itemId, $any($event.target).value)"
+                    />
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <p class="text-xs text-text-muted">{{ 'orders.detail.fulfill.hint' | t }}</p>
+          @if (fulfillError(); as err) {
+            <p class="form-banner">{{ err | t }}</p>
+          }
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" (click)="closeFulfill()">{{ 'orders.detail.cancel' | t }}</button>
+            <button type="submit" class="fluent-button-primary" [disabled]="fulfilling()">{{ 'orders.detail.fulfill' | t }}</button>
+          </div>
+        </form>
+      }
+
+    </div>
+  </div>
+}

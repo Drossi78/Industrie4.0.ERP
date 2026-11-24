@@ -1,0 +1,303 @@
+<app-navbar [showBack]="true"></app-navbar>
+
+<div class="page-shell">
+
+  <h1 class="page-title">{{ 'stock.title' | t }}</h1>
+  <p class="page-subtitle">{{ 'stock.subtitle' | t }}</p>
+
+  <!-- View toggle -->
+  <div class="mt-8 flex items-end justify-between border-b border-border">
+    <div class="flex gap-1">
+      <button
+        class="tab-btn"
+        [class.tab-btn--active]="view() === 'asset'"
+        (click)="switchView('asset')"
+      >
+        {{ 'stock.view.byAsset' | t }}
+      </button>
+      <button
+        class="tab-btn"
+        [class.tab-btn--active]="view() === 'warehouse'"
+        (click)="switchView('warehouse')"
+      >
+        {{ 'stock.view.byWarehouse' | t }}
+      </button>
+      <button
+        class="tab-btn"
+        [class.tab-btn--active]="view() === 'reservation'"
+        (click)="switchView('reservation')"
+      >
+        {{ 'stock.view.reservations' | t }}
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2 mb-2">
+      @if (view() === 'reservation') {
+        @if (canEdit()) {
+          <button class="fluent-button-primary" (click)="openReservation()">{{ 'stock.reservation.action' | t }}</button>
+        }
+        <button class="btn-secondary" (click)="loadReservations()">{{ 'stock.reload' | t }}</button>
+      } @else {
+        @if (canEdit()) {
+          <button class="fluent-button-primary" (click)="openBooking()">{{ 'stock.book.transfer' | t }}</button>
+        }
+        @if (view() === 'asset') {
+          <button class="btn-secondary" (click)="loadAssetLevels()">{{ 'stock.reload' | t }}</button>
+        } @else {
+          <button class="btn-secondary" (click)="loadWarehouses()">{{ 'stock.reload' | t }}</button>
+        }
+      }
+    </div>
+  </div>
+
+  <!-- Per-asset view -->
+  @if (view() === 'asset') {
+    <div class="mt-6">
+      <app-data-table
+        [columns]="columns"
+        [page]="page()"
+        [loading]="loading()"
+      />
+    </div>
+  }
+
+  <!-- Per-warehouse view -->
+  @if (view() === 'warehouse') {
+    <div class="mt-6">
+      @if (warehousesLoading()) {
+        <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+          {{ 'table.loading' | t }}
+        </div>
+      } @else if (warehouses().length === 0) {
+        <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+          {{ 'stock.warehouse.empty' | t }}
+        </div>
+      } @else {
+        <div class="flex flex-col gap-2">
+          @for (wh of warehouses(); track wh.id) {
+            <div class="fluent-card">
+              <!-- Warehouse header (clickable) -->
+              <button class="accordion-header" (click)="toggleWarehouse(wh.id)">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                  class="size-4 transition-transform"
+                  [class.rotate-90]="expandedId() === wh.id"
+                >
+                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+                </svg>
+                <span class="accordion-title">{{ wh.name }}</span>
+                @if (wh.city) {
+                  <span class="accordion-subtitle">{{ wh.city }}</span>
+                }
+              </button>
+
+              <!-- Expanded sublist -->
+              @if (expandedId() === wh.id) {
+                <div class="accordion-body">
+                  @if (levelsLoadingId() === wh.id) {
+                    <div class="py-6 text-center text-text-muted text-sm">{{ 'table.loading' | t }}</div>
+                  } @else if (levelsFor(wh.id).length === 0) {
+                    <div class="py-6 text-center text-text-muted text-sm">{{ 'stock.warehouse.noStock' | t }}</div>
+                  } @else {
+                    <table class="fluent-table">
+                      <thead>
+                        <tr>
+                          <th>{{ 'stock.col.asset' | t }}</th>
+                          <th>{{ 'stock.col.totalIn' | t }}</th>
+                          <th>{{ 'stock.col.totalOut' | t }}</th>
+                          <th>{{ 'stock.col.balance' | t }}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (level of levelsFor(wh.id); track level.itemId) {
+                          <tr class="fluent-row">
+                            <td class="fluent-cell-primary">{{ level.itemName }}</td>
+                            <td class="fluent-cell">{{ level.totalIn.toLocaleString('de-DE') }}</td>
+                            <td class="fluent-cell">{{ level.totalOut.toLocaleString('de-DE') }}</td>
+                            <td class="fluent-cell">
+                              <span [class]="balanceBadgeClass(level.balance)">{{ level.balance.toLocaleString('de-DE') }}</span>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Reservation view -->
+  @if (view() === 'reservation') {
+    <div class="mt-6">
+      @if (reservationsLoading()) {
+        <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+          {{ 'table.loading' | t }}
+        </div>
+      } @else if (reservations().length === 0) {
+        <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+          {{ 'stock.reservation.empty' | t }}
+        </div>
+      } @else {
+        <div class="fluent-card overflow-x-auto">
+          <table class="fluent-table">
+            <thead>
+              <tr>
+                <th>{{ 'stock.col.asset' | t }}</th>
+                <th>{{ 'stock.reservation.col.warehouse' | t }}</th>
+                <th>{{ 'stock.reservation.col.quantity' | t }}</th>
+                <th>{{ 'stock.reservation.col.createdAt' | t }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of reservations(); track r.id) {
+                <tr class="fluent-row">
+                  <td class="fluent-cell-primary">
+                    {{ r.itemName }}
+                    @if (r.note) {
+                      <div class="text-xs text-text-soft mt-0.5">{{ r.note }}</div>
+                    }
+                  </td>
+                  <td class="fluent-cell">{{ r.warehouseName }}</td>
+                  <td class="fluent-cell"><span class="fluent-badge">{{ r.quantity.toLocaleString('de-DE') }}</span></td>
+                  <td class="fluent-cell">{{ formatDate(r.createdAt) }}</td>
+                  <td class="fluent-cell text-right">
+                    @if (canEdit()) {
+                      <button class="btn-secondary btn-sm" (click)="releaseReservation(r.id)" [disabled]="releasingId() === r.id">
+                        {{ 'stock.reservation.release' | t }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<!-- Stock transfer modal -->
+@if (showBooking()) {
+  <div class="modal-backdrop" (click)="closeBooking()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'stock.book.transfer' | t }}</h2>
+        <button class="modal-close" (click)="closeBooking()" aria-label="Schließen">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="transferForm" (ngSubmit)="submitBooking()" novalidate>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.asset' | t }}</span>
+          <select class="form-input" formControlName="itemId" (change)="loadTransferStock($any($event.target).value)">
+            <option value="">—</option>
+            @for (i of stockItems(); track i.itemId) {
+              <option [value]="i.itemId">{{ i.itemName }}</option>
+            }
+          </select>
+        </label>
+        <div class="form-row">
+          <label class="form-field">
+            <span class="form-label">{{ 'stock.book.fromWarehouse' | t }}</span>
+            <select class="form-input" formControlName="fromWarehouseId">
+              <option value="">—</option>
+              @for (w of warehouses(); track w.id) {
+                <option [value]="w.id">{{ w.name }} ({{ warehouseStock(w.id).toLocaleString('de-DE') }})</option>
+              }
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="form-label">{{ 'stock.book.toWarehouse' | t }}</span>
+            <select class="form-input" formControlName="toWarehouseId">
+              <option value="">—</option>
+              @for (w of warehouses(); track w.id) {
+                <option [value]="w.id">{{ w.name }} ({{ warehouseStock(w.id).toLocaleString('de-DE') }})</option>
+              }
+            </select>
+          </label>
+        </div>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.quantity' | t }}</span>
+          <input class="form-input" type="number" min="1" formControlName="quantity" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.note' | t }}</span>
+          <input class="form-input" type="text" formControlName="note" />
+        </label>
+        @if (bookingError(); as err) {
+          <p class="form-banner">{{ err | t }}</p>
+        }
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeBooking()">{{ 'stock.book.cancel' | t }}</button>
+          <button type="submit" class="fluent-button-primary" [disabled]="booking()">{{ 'stock.book.transfer' | t }}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+}
+
+<!-- Reservation modal -->
+@if (showReservation()) {
+  <div class="modal-backdrop" (click)="closeReservation()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'stock.reservation.title' | t }}</h2>
+        <button class="modal-close" (click)="closeReservation()" aria-label="Schließen">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="reservationForm" (ngSubmit)="submitReservation()" novalidate>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.asset' | t }}</span>
+          <select class="form-input" formControlName="itemId">
+            <option value="">—</option>
+            @for (i of stockItems(); track i.itemId) {
+              <option [value]="i.itemId">{{ i.itemName }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.warehouse' | t }}</span>
+          <select class="form-input" formControlName="warehouseId">
+            <option value="">—</option>
+            @for (w of warehouses(); track w.id) {
+              <option [value]="w.id">{{ w.name }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.quantity' | t }}</span>
+          <input class="form-input" type="number" min="1" formControlName="quantity" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'stock.book.note' | t }}</span>
+          <input class="form-input" type="text" formControlName="note" />
+        </label>
+        @if (reservationError(); as err) {
+          <p class="form-banner">{{ err | t }}</p>
+        }
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeReservation()">{{ 'stock.book.cancel' | t }}</button>
+          <button type="submit" class="fluent-button-primary" [disabled]="reserving()">{{ 'stock.reservation.submit' | t }}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+}

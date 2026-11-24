@@ -1,0 +1,163 @@
+@if (filters.length) {
+  <div class="mb-4 flex flex-wrap items-end gap-4">
+    @for (f of filters; track f.key) {
+      <label class="flex flex-col gap-1 text-xs text-text-muted">
+        {{ f.labelKey | t }}
+        @if (f.type === 'select') {
+          <select
+            class="rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+            [value]="filterValues()[f.key]"
+            (change)="onSelectFilter(f.key, $any($event.target).value)"
+          >
+            <option value="">{{ 'table.filter.all' | t }}</option>
+            @for (o of f.options ?? []; track o.value) {
+              <option [value]="o.value">{{ o.labelKey | t }}</option>
+            }
+          </select>
+        } @else {
+          <input
+            type="search"
+            class="w-64 rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+            [value]="filterValues()[f.key]"
+            (input)="onTextFilter(f.key, $any($event.target).value)"
+          />
+        }
+      </label>
+    }
+
+    @if (hasActiveFilters()) {
+      <button
+        type="button"
+        class="rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm text-text-muted transition hover:bg-surface-muted"
+        (click)="clearFilters()"
+      >
+        {{ 'table.filter.clear' | t }}
+      </button>
+    }
+  </div>
+}
+
+<div class="fluent-card overflow-x-auto">
+
+  @if (loading) {
+    <div class="flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'table.loading' | t }}
+    </div>
+  } @else if (!page || page.empty) {
+    <div class="flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'table.empty' | t }}
+    </div>
+  } @else {
+
+    <table class="fluent-table">
+      <thead>
+        <tr>
+          @if (selectable) {
+            <th class="w-10 px-4">
+              <input
+                type="checkbox"
+                [checked]="isAllSelected()"
+                (change)="toggleAll($any($event.target).checked)"
+                class="size-4 rounded border-border accent-primary cursor-pointer"
+              />
+            </th>
+          }
+          @for (col of columns; track col.key) {
+            <th
+              [class.cursor-pointer]="col.sortField"
+              [class.select-none]="col.sortField"
+              (click)="onSort(col)"
+            >
+              <span class="inline-flex items-center gap-1">
+                {{ col.labelKey | t }}
+                @if (col.sortField) {
+                  @if (sortIndicator(col) === 'asc') {
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3 text-primary">
+                      <path fill-rule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clip-rule="evenodd" />
+                    </svg>
+                  } @else if (sortIndicator(col) === 'desc') {
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3 text-primary">
+                      <path fill-rule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clip-rule="evenodd" />
+                    </svg>
+                  } @else {
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3 text-text-soft">
+                      <path fill-rule="evenodd" d="M13.78 6.22a.75.75 0 0 1 0 1.06l-5.25 5.25a.75.75 0 0 1-1.06 0L2.22 7.28a.75.75 0 0 1 1.06-1.06L8 10.94l4.72-4.72a.75.75 0 0 1 1.06 0ZM2.22 3.53a.75.75 0 0 1 1.06-1.06L8 7.19l4.72-4.72a.75.75 0 1 1 1.06 1.06l-5.25 5.25a.75.75 0 0 1-1.06 0L2.22 3.53Z" clip-rule="evenodd" />
+                    </svg>
+                  }
+                }
+              </span>
+            </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of page.content; track row['id'] ?? $index) {
+          <tr class="fluent-row" (click)="rowClick.observed && rowClick.emit(row)" [class.cursor-pointer]="rowClick.observed">
+            @if (selectable) {
+              <td class="w-10 px-4 py-4">
+                <input
+                  type="checkbox"
+                  [checked]="isSelected(row['id'])"
+                  (click)="$event.stopPropagation(); toggleRow(row['id'])"
+                  class="size-4 rounded border-border accent-primary cursor-pointer"
+                />
+              </td>
+            }
+            @for (col of columns; track col.key; let first = $first) {
+              <td [class]="first ? 'fluent-cell-primary' : 'fluent-cell'">
+                @if (col.badgeClass) {
+                  <span [class]="col.badgeClass(row)">{{ col.value(row) }}</span>
+                } @else {
+                  {{ col.value(row) }}
+                  @if (col.subValue?.(row)) {
+                    <div class="text-xs text-text-soft mt-0.5">{{ col.subValue!(row) }}</div>
+                  }
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <!-- Pagination bar -->
+    <div class="flex items-center justify-between gap-4 px-6 py-3 border-t border-border-soft text-sm text-text-muted">
+
+      <div class="flex items-center gap-2">
+        <span>{{ 'table.page.size' | t }}</span>
+        <select
+          class="rounded-[var(--radius-control)] border border-border bg-surface px-2 py-1 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          (change)="onSizeChange(+$any($event.target).value)"
+        >
+          @for (opt of pageSizeOptions; track opt) {
+            <option [value]="opt" [selected]="opt === pageSize()">{{ opt }}</option>
+          }
+        </select>
+      </div>
+
+      <span>
+        {{ rangeStart() }}–{{ rangeEnd() }} {{ 'table.page.of' | t }} {{ page.totalElements }}
+      </span>
+
+      <div class="flex items-center gap-1">
+        <button
+          class="rounded-[var(--radius-control)] px-3 py-1.5 transition hover:bg-surface-muted disabled:opacity-40 disabled:cursor-not-allowed"
+          [disabled]="page.first"
+          (click)="onPageChange(currentPage() - 1)"
+        >
+          {{ 'table.page.prev' | t }}
+        </button>
+        <span class="px-2">{{ currentPage() + 1 }} / {{ page.totalPages }}</span>
+        <button
+          class="rounded-[var(--radius-control)] px-3 py-1.5 transition hover:bg-surface-muted disabled:opacity-40 disabled:cursor-not-allowed"
+          [disabled]="page.last"
+          (click)="onPageChange(currentPage() + 1)"
+        >
+          {{ 'table.page.next' | t }}
+        </button>
+      </div>
+
+    </div>
+  }
+
+</div>

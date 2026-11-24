@@ -1,0 +1,183 @@
+<app-navbar [showBack]="true" />
+
+<div class="page-shell">
+
+  @if (loading()) {
+    <div class="flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'table.loading' | t }}
+    </div>
+  } @else if (order(); as o) {
+
+    <!-- Header -->
+    <h1 class="page-title">{{ o.orderNumber ?? ('orders.detail.noNumber' | t) }}</h1>
+    <p class="page-subtitle">{{ o.customerName || ('production.col.customer' | t) }}</p>
+
+    @if (updateError()) {
+      <div class="mt-4 rounded-[var(--radius-control)] bg-danger/10 px-4 py-3 text-sm text-danger">
+        {{ updateError() }}
+      </div>
+    }
+
+    <!-- Lines -->
+    <div class="mt-8 flex flex-col gap-4">
+      @for (line of o.assets; track line.id) {
+        <div class="fluent-card overflow-hidden">
+
+          <!-- Line header -->
+          <div class="flex items-center gap-4 px-5 py-4">
+            <app-progress-ring
+              [total]="line.steps.length"
+              [completed]="doneCount(line.steps)"
+              [size]="44"
+            />
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-sm">{{ line.itemName }}</p>
+              <p class="text-xs text-text-muted mt-0.5">{{ line.quantity }}</p>
+            </div>
+            <span class="text-sm text-text-muted shrink-0">
+              {{ doneCount(line.steps) }} / {{ line.steps.length }}
+              {{ 'production.detail.steps' | t }}
+            </span>
+          </div>
+
+          <!-- Steps -->
+          <div class="border-t border-border-soft">
+            @if (!line.steps.length) {
+              <div class="px-5 py-4 text-sm text-text-muted">{{ 'orders.detail.noProduction' | t }}</div>
+            } @else {
+              @for (step of line.steps; track step.id; let last = $last) {
+                <div
+                  class="flex flex-wrap items-center gap-3 px-5 py-3 text-sm"
+                  [class.border-b]="!last"
+                  [class.border-border-soft]="!last"
+                  [class.opacity-60]="isUpdating(step.id)"
+                >
+                  <!-- Order number + status badge -->
+                  <span class="w-5 shrink-0 text-xs text-text-muted text-center">{{ step.stepOrder }}</span>
+                  <span [class]="stepBadgeClass(step.status)">{{ stepLabel(step.status) }}</span>
+
+                  <!-- Step name -->
+                  <span class="flex-1 min-w-0 truncate font-medium">{{ step.name }}</span>
+
+                  <!-- Assignment dropdown -->
+                  @if (canEdit()) {
+                    <select
+                      class="rounded-[var(--radius-control)] border border-border bg-surface px-2 py-1 text-xs text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      [disabled]="isUpdating(step.id)"
+                      (change)="setAssignment(line.id, step, $any($event.target).value)"
+                    >
+                      <option value="" [selected]="!step.assignedTo">{{ 'production.step.unassigned' | t }}</option>
+                      @for (user of users(); track user.id) {
+                        <option [value]="user.id" [selected]="user.id === step.assignedTo?.id">{{ user.email }}</option>
+                      }
+                    </select>
+                  }
+
+                  <!-- Action buttons -->
+                  @if (canEdit()) {
+                    <div class="flex items-center gap-1 shrink-0">
+                      @if (step.status === ProductionStepStatus.PENDING) {
+                        <button
+                          type="button"
+                          class="fluent-btn-sm-primary"
+                          [disabled]="isUpdating(step.id)"
+                          (click)="setStatus(line.id, step, ProductionStepStatus.IN_PROGRESS)"
+                        >
+                          {{ 'production.action.start' | t }}
+                        </button>
+                      }
+                      @if (step.status === ProductionStepStatus.IN_PROGRESS) {
+                        <button
+                          type="button"
+                          class="fluent-btn-sm-success"
+                          [disabled]="isUpdating(step.id)"
+                          (click)="setStatus(line.id, step, ProductionStepStatus.DONE)"
+                        >
+                          {{ 'production.action.complete' | t }}
+                        </button>
+                        <button
+                          type="button"
+                          class="fluent-btn-sm-neutral"
+                          [disabled]="isUpdating(step.id)"
+                          (click)="setStatus(line.id, step, ProductionStepStatus.PENDING)"
+                        >
+                          {{ 'production.action.reset' | t }}
+                        </button>
+                      }
+                      @if (step.status === ProductionStepStatus.DONE) {
+                        <button
+                          type="button"
+                          class="fluent-btn-sm-neutral"
+                          [disabled]="isUpdating(step.id)"
+                          (click)="setStatus(line.id, step, ProductionStepStatus.IN_PROGRESS)"
+                        >
+                          {{ 'production.action.undo' | t }}
+                        </button>
+                      }
+                    </div>
+                  }
+
+                </div>
+              }
+            }
+          </div>
+
+        </div>
+      }
+    </div>
+
+  } @else {
+    <div class="fluent-card flex items-center justify-center py-20 text-text-muted text-sm">
+      {{ 'orders.detail.notFound' | t }}
+    </div>
+  }
+
+</div>
+
+<!-- Warehouse-selection prompt for completing the last step of an order line -->
+@if (pendingCompletion(); as pending) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelCompletion()"></div>
+
+    <!-- Card -->
+    <div class="relative z-10 fluent-card w-full max-w-md p-6">
+      <h2 class="text-lg font-semibold text-text mb-2">{{ 'production.warehousePrompt.title' | t }}</h2>
+      <p class="text-sm text-text-muted mb-6">{{ 'production.warehousePrompt.hint' | t }}</p>
+
+      <label class="block">
+        <span class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+          {{ 'stock.book.warehouse' | t }}
+        </span>
+        <select
+          class="w-full rounded-[var(--radius-control)] border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          [value]="pendingWarehouseId()"
+          (change)="pendingWarehouseId.set($any($event.target).value)"
+        >
+          <option value="">—</option>
+          @for (w of warehouses(); track w.id) {
+            <option [value]="w.id">{{ w.name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button
+          type="button"
+          (click)="cancelCompletion()"
+          class="rounded-[var(--radius-control)] px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-muted transition-colors"
+        >
+          {{ 'items.btn.cancel' | t }}
+        </button>
+        <button
+          type="button"
+          [disabled]="!pendingWarehouseId()"
+          (click)="confirmCompletion()"
+          class="fluent-button-primary disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+        >
+          {{ 'production.action.complete' | t }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

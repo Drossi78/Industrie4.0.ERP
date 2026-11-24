@@ -1,0 +1,79 @@
+<app-navbar [showBack]="true"></app-navbar>
+<div class="page-shell">
+  <div class="flex items-start justify-between">
+    <div>
+      <h1 class="page-title">{{ 'orders.title' | t }}</h1>
+      <p class="page-subtitle">{{ 'orders.subtitle' | t }}</p>
+    </div>
+    @if (canCreate()) {
+      <button class="fluent-button-primary" (click)="openCreate()">{{ 'orders.new.action' | t }}</button>
+    }
+  </div>
+
+  <div class="mt-8">
+    <app-data-table
+      [columns]="columns"
+      [filters]="filterDefs()"
+      [page]="page()"
+      [loading]="loading()"
+      (queryChange)="onQuery($event)"
+      (rowClick)="openOrder($event)"
+    />
+  </div>
+</div>
+
+<!-- Create order modal -->
+@if (showCreate()) {
+  <div class="modal-backdrop" (click)="closeCreate()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'orders.new.title' | t }}</h2>
+        <button class="modal-close" (click)="closeCreate()" aria-label="Schließen">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </button>
+      </div>
+
+      <form class="modal-form" [formGroup]="createForm" (ngSubmit)="submitCreate()" novalidate>
+        <label class="form-field">
+          <span class="form-label">{{ 'orders.new.customer' | t }}</span>
+          <select class="form-input" formControlName="customerId">
+            <option value="">{{ 'orders.new.customerNone' | t }}</option>
+            @for (c of customers(); track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'orders.new.orderNumber' | t }}</span>
+          <input class="form-input" type="text" formControlName="orderNumber" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'orders.new.direction' | t }}</span>
+          <select class="form-input" formControlName="direction">
+            <option value="OUT">{{ 'orders.direction.out' | t }}</option>
+            <option value="IN">{{ 'orders.direction.in' | t }}</option>
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'orders.new.expectedDate' | t }}</span>
+          <input class="form-input" type="date" formControlName="expectedDate" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">{{ 'orders.new.notes' | t }}</span>
+          <textarea class="form-input form-textarea" formControlName="notes"></textarea>
+        </label>
+        @if (createError(); as err) {
+          <p class="form-banner">{{ err | t }}</p>
+        }
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeCreate()">{{ 'orders.new.cancel' | t }}</button>
+          <button type="submit" class="fluent-button-primary" [disabled]="creating()">{{ 'orders.new.submit' | t }}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+}

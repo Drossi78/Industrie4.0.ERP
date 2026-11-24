@@ -1,4 +1,5 @@
 server:
+  port: ${PORT:8080}
   max-http-header-size: 16KB
 spring:
   application:
@@ -7,9 +8,9 @@ spring:
     compose:
       enabled: false
   datasource:
-    url: jdbc:postgresql://aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require&stringtype=unspecified
-    username: postgres.peuylegnlluuulifxyfa
-    password: qetdaH-8vymvu-qevjoq
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -20,8 +21,10 @@ spring:
     enabled: false   # Schema is managed by Supabase CLI (supabase/migrations/)
 
 app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:https://drossi78.github.io,http://localhost:4200,http://127.0.0.1:4200,http://localhost:3000,http://127.0.0.1:3000}
   jwt:
-    secret: stratiq-secret-key-for-jwt-signing-must-be-at-least-256-bits-long-abcdef
+    secret: ${APP_JWT_SECRET}
     expiration-ms: 86400000
     refresh-expiration-ms: 604800000
   invoicing:

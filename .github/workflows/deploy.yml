@@ -1,0 +1,38 @@
+name: Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-master/stratiq-frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend-master/stratiq-frontend
+      - run: npm run build -- --base-href "/${{ github.event.repository.name }}/"
+        working-directory: frontend-master/stratiq-frontend
+      - run: cp dist/stratiq-frontend/browser/index.html dist/stratiq-frontend/browser/404.html
+        working-directory: frontend-master/stratiq-frontend
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend-master/stratiq-frontend/dist/stratiq-frontend/browser
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
